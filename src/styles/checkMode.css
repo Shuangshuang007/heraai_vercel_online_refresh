@@ -1,0 +1,45 @@
+/* Check 模式高亮样式 */
+
+/* 词级高亮：仅包住词/词组 */
+.mr-bad { 
+  background: #FEF3C7 !important; 
+  border-radius: 4px !important; 
+  padding: 0 2px !important; 
+}
+
+/* 行级高亮：整条 bullet/句子 */
+.mr-line { 
+  background: #FEF3C7 !important; 
+  border-radius: 4px !important; 
+  padding: 2px 4px !important; 
+}
+
+/* 缺失的必需技能 chip */
+.mr-chip { 
+  background: #FEF3C7 !important; 
+}
+
+/* 命中的必需技能 chip */
+.mr-good { 
+  background: #DCFCE7 !important; 
+  color: #166534 !important; 
+  border: 1px solid #22C55E !important; 
+}
+
+/* 新增：缺失词语的红色字体样式 */
+.mr-missing-text { 
+  color: #DC2626 !important; 
+  font-weight: 600 !important; 
+}
+
+/* PDF预览模式 - 确保不显示任何高亮 */
+.pdf-preview .mr-bad,
+.pdf-preview .mr-line,
+.pdf-preview .mr-chip,
+.pdf-preview .mr-good,
+.pdf-preview .mr-missing-text {
+  background: transparent !important;
+  color: inherit !important;
+  border: none !important;
+  text-decoration: none !important;
+}
