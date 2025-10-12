@@ -414,11 +414,11 @@ async function handleSearchJobs(args: any) {
     setTimeout(() => reject(new Error('Database timeout (2s)')), 2000);
   });
 
-  let result;
+  let result: { jobs?: Job[] };
   let warnings: string[] = [];
   
   try {
-    result = await Promise.race([fetchPromise, timeoutPromise]);
+    result = await Promise.race([fetchPromise, timeoutPromise]) as { jobs?: Job[] };
   } catch (error) {
     if (error instanceof Error && error.message.includes('timeout')) {
       warnings.push('Database query timed out after 2s, returning partial results');
