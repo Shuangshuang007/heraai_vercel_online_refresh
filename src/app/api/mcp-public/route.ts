@@ -86,9 +86,9 @@ Perfect for: Users seeking comprehensive job coverage beyond single platforms.`,
           },
           limit: {
             type: 'integer',
-            description: 'Maximum number of jobs to return after deduplication (1-10). Default: 5',
+            description: 'Maximum number of jobs to return after deduplication (1-20). Default: 5',
             minimum: 1,
-            maximum: 10,
+            maximum: 20,
             default: 5,
           },
         },
@@ -240,17 +240,13 @@ async function handleSearchJobs(args: any) {
   const sourceStrategy = getSourceStrategy(params.country_code, params.sources);
   console.log(`[MCP-Public search_jobs] Strategy: ${sourceStrategy.strategy}`);
 
-  // Call existing fetchJobs service directly with timeout optimization
+  // Call existing fetchJobs service directly
   const platformParam = sourceStrategy.sources.includes('seek') ? 'all' : 'linkedin';
-  const fetchLimit = Math.min(params.limit * 2, 20); // Reduced limit for faster response
+  const fetchLimit = Math.min(params.limit * 3, 30); // Reduced limit for faster response
   
   console.log(`[MCP-Public search_jobs] Calling fetchJobs service directly`);
 
-  // Add timeout protection for ChatGPT
-  const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => reject(new Error('Request timeout - please try with fewer results')), 8000); // 8 second timeout
-  });
-
+  // Add timeout protection for ChatGPT (max 20 seconds)
   const fetchPromise = fetchJobs({
     jobTitle: params.job_title,
     city: params.city,
@@ -259,7 +255,11 @@ async function handleSearchJobs(args: any) {
     page: 1,
   });
 
-  const result = await Promise.race([fetchPromise, timeoutPromise]);
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('Request timeout - please try with more specific search terms')), 20000);
+  });
+
+  const result = await Promise.race([fetchPromise, timeoutPromise]) as any;
 
   let jobs: Job[] = result.jobs || [];
   const totalBeforeDedup = jobs.length;
@@ -278,8 +278,21 @@ async function handleSearchJobs(args: any) {
       console.log(`[MCP-Public search_jobs] Deduplication: ${beforeDedup} → ${jobs.length} jobs`);
     }
 
-    // Limit final results
+    // Limit final results and optimize for ChatGPT (reduce data size)
     jobs = jobs.slice(0, params.limit);
+    
+    // Simplify job objects for faster response (keep only essential fields)
+    jobs = jobs.map(job => ({
+      id: job.id,
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      source: job.source,
+      source_label: job.source_label,
+      matchScore: job.matchScore,
+      url: job.url,
+      // Remove heavy fields: description, requirements, benefits, etc.
+    }));
   }
 
   // Format response with metadata
