@@ -33,6 +33,38 @@ import {
 // Database connection pool for non-blocking ping
 let dbPingPromise: Promise<boolean> | null = null;
 
+// Parameter normalization function (camelCase to snake_case)
+function normalizeArgs(args: any): any {
+  const normalized: any = {};
+  
+  for (const [key, value] of Object.entries(args)) {
+    let normalizedKey = key;
+    
+    // Map common camelCase to snake_case
+    if (key === 'countryCode') normalizedKey = 'country_code';
+    if (key === 'userEmail') normalizedKey = 'user_email';
+    if (key === 'statusFilter') normalizedKey = 'status_filter';
+    if (key === 'jobTitle') normalizedKey = 'job_title';
+    if (key === 'postedWithinDays') normalizedKey = 'posted_within_days';
+    if (key === 'enableDeduplication') normalizedKey = 'enable_deduplication';
+    if (key === 'minMatchScore') normalizedKey = 'min_match_score';
+    
+    normalized[normalizedKey] = value;
+  }
+  
+  // Apply defaults for schema-defined fields
+  if (!normalized.country_code) normalized.country_code = 'AU';
+  if (!normalized.sources) normalized.sources = ['all'];
+  if (!normalized.enable_deduplication) normalized.enable_deduplication = true;
+  if (!normalized.limit) normalized.limit = 10;
+  if (!normalized.platforms) normalized.platforms = ['linkedin', 'seek', 'jora', 'adzuna'];
+  if (!normalized.posted_within_days) normalized.posted_within_days = 7;
+  if (!normalized.status_filter) normalized.status_filter = 'all';
+  if (!normalized.min_match_score) normalized.min_match_score = 0;
+  
+  return normalized;
+}
+
 // Non-blocking database ping function
 async function performDatabasePing(): Promise<boolean> {
   console.log('[MCP] DB ping started');
@@ -282,13 +314,76 @@ export async function POST(request: NextRequest) {
     startAt: new Date().toISOString()
   });
 
+  // Tool whitelist for validation
+  const ALLOWED_TOOLS = ["search_jobs", "build_search_links", "get_user_applications"];
+
   try {
     const body = await request.json();
-    const { name, arguments: args } = body;
+    
+    // Log raw body for debugging
+    console.log('[MCP] Raw body:', JSON.stringify(body).substring(0, 200));
+    
+    // Compatible field parsing (support both name/tool and arguments/args)
+    const toolName = body.name ?? body.tool;
+    let args = body.arguments ?? body.args ?? {};
+    
+    // Handle string arguments (double JSON.stringify case)
+    if (typeof args === 'string') {
+      try {
+        args = JSON.parse(args);
+      } catch (e) {
+        return NextResponse.json(
+          {
+            error: 'BAD_ARGUMENTS',
+            message: "'arguments' must be valid JSON when provided as string"
+          },
+          { status: 400 }
+        );
+      }
+    }
+    
+    // Ensure args is an object
+    if (typeof args !== 'object' || args === null) {
+      return NextResponse.json(
+        {
+          error: 'BAD_ARGUMENTS',
+          message: "'arguments' must be an object"
+        },
+        { status: 400 }
+      );
+    }
 
-    console.log(`[MCP] Tool invoked: ${name}`, {
-      args: args ? JSON.stringify(args).substring(0, 200) : 'undefined',
+    // Validate tool name
+    if (!toolName) {
+      return NextResponse.json(
+        {
+          error: 'UNKNOWN_TOOL',
+          message: "Missing 'name' (or 'tool') in request",
+          bodySnippet: JSON.stringify(body).substring(0, 200)
+        },
+        { status: 400 }
+      );
+    }
+
+    // Check tool whitelist (case-sensitive)
+    if (!ALLOWED_TOOLS.includes(toolName)) {
+      return NextResponse.json(
+        {
+          error: 'UNKNOWN_TOOL',
+          message: `Tool '${toolName}' not recognized`,
+          allowed: ALLOWED_TOOLS
+        },
+        { status: 400 }
+      );
+    }
+
+    console.log(`[MCP] Tool invoked: ${toolName}`, {
+      args: Object.keys(args).join(', '),
+      argsCount: Object.keys(args).length
     });
+
+    // Normalize parameter names (camelCase to snake_case)
+    const normalizedArgs = normalizeArgs(args);
 
     // Route to appropriate tool handler with timeout protection
     const timeoutPromise = new Promise((_, reject) => {
@@ -296,67 +391,63 @@ export async function POST(request: NextRequest) {
     });
 
     let result;
-    switch (name) {
+    switch (toolName) {
       case 'search_jobs':
         result = await Promise.race([
-          handleSearchJobs(args),
+          handleSearchJobs(normalizedArgs),
           timeoutPromise
         ]);
         break;
 
       case 'build_search_links':
         result = await Promise.race([
-          handleBuildSearchLinks(args),
+          handleBuildSearchLinks(normalizedArgs),
           timeoutPromise
         ]);
         break;
 
       case 'get_user_applications':
         result = await Promise.race([
-          handleGetApplications(args),
+          handleGetApplications(normalizedArgs),
           timeoutPromise
         ]);
         break;
-
-      default:
-        const duration = Date.now() - startTime;
-        console.log('[MCP] POST response:', {
-          status: 400,
-          durationMs: duration,
-          error: 'Unknown tool'
-        });
-        
-        return NextResponse.json(
-          {
-            error: `Unknown tool: ${name}`,
-            code: 'INVALID_TOOL',
-          },
-          { status: 400 }
-        );
     }
 
     const duration = Date.now() - startTime;
     console.log('[MCP] POST response:', {
       status: 200,
       durationMs: duration,
-      tool: name
+      tool: toolName
     });
 
     return result;
   } catch (error: any) {
     const duration = Date.now() - startTime;
+    const status = error.message.includes('timeout') ? 408 : 500;
+    
     console.log('[MCP] POST error:', {
-      status: error.message.includes('timeout') ? 408 : 500,
+      status: status,
       durationMs: duration,
       error: error.message
     });
     
+    if (error.message.includes('timeout')) {
+      return NextResponse.json(
+        {
+          content: {},
+          meta: { warning: "TIMEOUT", stage: "tool_execution" }
+        },
+        { status: 200 }
+      );
+    }
+    
     return NextResponse.json(
       {
-        error: error.message || 'Internal server error',
-        code: 'SERVER_ERROR',
+        error: 'INTERNAL',
+        message: error.message
       },
-      { status: error.message.includes('timeout') ? 408 : 500 }
+      { status: 500 }
     );
   }
 }
