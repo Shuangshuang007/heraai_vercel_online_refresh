@@ -86,10 +86,10 @@ Perfect for: Users seeking comprehensive job coverage beyond single platforms.`,
           },
           limit: {
             type: 'integer',
-            description: 'Maximum number of jobs to return after deduplication (1-20). Default: 5',
+            description: 'Maximum number of jobs to return after deduplication (1-10). Default: 3',
             minimum: 1,
-            maximum: 20,
-            default: 5,
+            maximum: 10,
+            default: 3,
           },
         },
         required: ['job_title', 'city'],
@@ -242,11 +242,11 @@ async function handleSearchJobs(args: any) {
 
   // Call existing fetchJobs service directly
   const platformParam = sourceStrategy.sources.includes('seek') ? 'all' : 'linkedin';
-  const fetchLimit = Math.min(params.limit * 3, 30); // Reduced limit for faster response
+  const fetchLimit = Math.min(params.limit * 2, 15); // Further reduced for faster response
   
   console.log(`[MCP-Public search_jobs] Calling fetchJobs service directly`);
 
-  // Add timeout protection for ChatGPT (max 20 seconds)
+  // Add timeout protection for ChatGPT (max 8 seconds - reduced for faster response)
   const fetchPromise = fetchJobs({
     jobTitle: params.job_title,
     city: params.city,
@@ -256,7 +256,7 @@ async function handleSearchJobs(args: any) {
   });
 
   const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => reject(new Error('Request timeout - please try with more specific search terms')), 20000);
+    setTimeout(() => reject(new Error('Request timeout - please try with more specific search terms')), 8000);
   });
 
   const result = await Promise.race([fetchPromise, timeoutPromise]) as any;
