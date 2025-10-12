@@ -211,7 +211,7 @@ function generatePlatformLink(
   platform: string,
   args: Omit<LinkGenerationArgs, 'platforms'>
 ): SearchLink | null {
-  const { job_title, city, country_code, posted_within_days } = args;
+  const { job_title, city, country_code = 'AU', posted_within_days = 7 } = args;
 
   switch (platform.toLowerCase()) {
     case 'linkedin':
