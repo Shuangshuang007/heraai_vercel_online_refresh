@@ -492,7 +492,7 @@ async function handleSearchJobs(args: any) {
     limit: fetchLimit,
   });
 
-  // Add soft timeout for fetchJobs (2s)
+  // Add soft timeout for fetchJobs (5s)
   const fetchPromise = fetchJobs({
     jobTitle: params.job_title,
     city: params.city,
@@ -502,7 +502,7 @@ async function handleSearchJobs(args: any) {
   });
 
   const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => reject(new Error('Database timeout (2s)')), 2000);
+    setTimeout(() => reject(new Error('Database timeout (5s)')), 5000);
   });
 
   let result: { jobs?: Job[] };
@@ -512,7 +512,7 @@ async function handleSearchJobs(args: any) {
     result = await Promise.race([fetchPromise, timeoutPromise]) as { jobs?: Job[] };
   } catch (error) {
     if (error instanceof Error && error.message.includes('timeout')) {
-      warnings.push('Database query timed out after 2s, returning partial results');
+      warnings.push('Database query timed out after 5s, returning partial results');
       result = { jobs: [] }; // Return empty results with warning
     } else {
       throw error;
