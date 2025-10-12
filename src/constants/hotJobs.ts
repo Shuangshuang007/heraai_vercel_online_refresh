@@ -93,11 +93,7 @@ export const HOT_JOBS_CONFIG = {
     'Therapist',
     'Social Worker',
     'Graduate Program',
-    'Internship Program',
-    'Christmas Casual',
-    'Casual Jobs',
-    'Part-time Jobs',
-    'Seasonal Work'
+    'Internship Program'
   ],
   
   // 模糊匹配关键词

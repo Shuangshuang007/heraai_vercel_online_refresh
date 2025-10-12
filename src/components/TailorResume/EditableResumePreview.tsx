@@ -63,6 +63,7 @@ export function EditableResumePreview({
 
   // === 关键：在"原字符串"上做一次性正则切分，返回 React 节点数组 ===
   const highlightInline = (text: string, missingList: string[], isCheckMode: boolean): React.ReactNode[] => {
+    console.log('🎨 highlightInline 调用:', { text: text.substring(0, 50), missingList, isCheckMode });
     if (!isCheckMode || !missingList || missingList.length === 0) return [text];
 
     const pattern = buildPattern(missingList);
@@ -83,8 +84,9 @@ export function EditableResumePreview({
       if (hasSkill) {
         // 如果句子包含技能词，高亮整个句子，并为missing词语添加红色字体
         const highlightedSentence = highlightMissingWords(sentence, missingList);
+        console.log('🎨 应用黄色高光:', sentence.substring(0, 30));
         result.push(
-          <span key={`sentence-${sentenceIndex}`} className="mr-bad">
+          <span key={`sentence-${sentenceIndex}`} className="mr-bad" style={{background: '#FEF3C7', padding: '0 2px', borderRadius: '4px'}}>
             {highlightedSentence}
           </span>
         );
@@ -174,8 +176,9 @@ export function EditableResumePreview({
       }
 
       // 添加高亮的词语（红色字体）
+      console.log('🔴 应用红色字体:', remainingText.substring(bestIndex, bestIndex + bestMatch.length));
       result.push(
-        <span key={`missing-${keyIndex++}`} className="mr-missing-text">
+        <span key={`missing-${keyIndex++}`} className="mr-missing-text" style={{color: '#DC2626', fontWeight: '600'}}>
           {remainingText.substring(bestIndex, bestIndex + bestMatch.length)}
         </span>
       );

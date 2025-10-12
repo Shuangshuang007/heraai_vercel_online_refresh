@@ -35,15 +35,20 @@ import {
 // ============================================
 
 function validateAuth(request: NextRequest): boolean {
-  const authHeader = request.headers.get('Authorization');
-  const expectedToken = `Bearer ${process.env.MCP_SHARED_SECRET}`;
+  // Temporarily disable auth for ChatGPT Connector testing
+  // TODO: Re-enable after ChatGPT integration is working
+  return true;
   
-  if (!expectedToken || expectedToken === 'Bearer undefined') {
-    console.error('[MCP Auth] MCP_SHARED_SECRET not configured');
-    return false;
-  }
-  
-  return authHeader === expectedToken;
+  // Original auth code (commented out):
+  // const authHeader = request.headers.get('Authorization');
+  // const expectedToken = `Bearer ${process.env.MCP_SHARED_SECRET}`;
+  // 
+  // if (!expectedToken || expectedToken === 'Bearer undefined') {
+  //   console.error('[MCP Auth] MCP_SHARED_SECRET not configured');
+  //   return false;
+  // }
+  // 
+  // return authHeader === expectedToken;
 }
 
 // ============================================

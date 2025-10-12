@@ -2055,6 +2055,9 @@ export default function ProfilePage() {
               <Link href="/applications" className="border-b-2 border-transparent h-[56px] flex items-center text-[18px] font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700">
                 Applications
               </Link>
+              <Link href="/resources" className="border-b-2 border-transparent h-[56px] flex items-center text-[18px] font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700">
+                Resources
+              </Link>
             </div>
           </div>
           <div className="flex items-center space-x-4">
