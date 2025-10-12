@@ -287,7 +287,7 @@ export async function POST(request: NextRequest) {
     const { name, arguments: args } = body;
 
     console.log(`[MCP] Tool invoked: ${name}`, {
-      args: JSON.stringify(args).substring(0, 200),
+      args: args ? JSON.stringify(args).substring(0, 200) : 'undefined',
     });
 
     // Route to appropriate tool handler with timeout protection
@@ -544,8 +544,8 @@ async function handleBuildSearchLinks(args: any) {
 async function handleGetApplications(args: any) {
   const { user_email, status_filter = 'all' } = args;
 
-  if (!user_email) {
-    throw new Error('user_email is required');
+  if (!user_email || typeof user_email !== 'string') {
+    throw new Error('user_email is required and must be a string');
   }
 
   // Call existing getUserProfile service directly (no changes to business logic)
