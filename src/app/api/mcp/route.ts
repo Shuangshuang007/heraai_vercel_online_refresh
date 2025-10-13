@@ -484,9 +484,14 @@ export async function POST(request: NextRequest) {
 
         // Handle NextResponse objects returned by tool handlers
         let contentData;
-        if (result && typeof result === 'object' && 'content' in result) {
-          // If result is a NextResponse-like object with content
-          contentData = result.content;
+        
+        // Check if result is a Response/NextResponse object
+        const isResponse = result instanceof Response || 
+          (typeof (result as any)?.json === 'function' && typeof (result as any)?.text === 'function');
+        
+        if (isResponse) {
+          // Unpack NextResponse/Response object
+          contentData = await (result as any).json();
         } else {
           // If result is plain data
           contentData = result;
@@ -497,7 +502,7 @@ export async function POST(request: NextRequest) {
           id: body.id ?? null,
           result: { 
             content: [
-              { type: "text", text: JSON.stringify(contentData) }
+              { type: "json", data: contentData }  // Use type: 'json' for structured data
             ],
             isError: false
           }
