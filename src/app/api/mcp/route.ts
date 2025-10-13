@@ -323,6 +323,12 @@ export async function POST(request: NextRequest) {
     // Log raw body for debugging
     console.log('[MCP] Raw body:', JSON.stringify(body).substring(0, 200));
     
+    // Handle JSON-RPC notifications (no id, no response needed)
+    if (body.id === undefined && body.method?.startsWith('notifications/')) {
+      console.log(`[MCP] Received notification: ${body.method}`);
+      return new Response(null, { status: 204 });
+    }
+
     // Handle JSON-RPC initialize handshake
     if (body?.method === "initialize") {
       console.log("[MCP] Received initialize handshake:", body);
@@ -426,16 +432,6 @@ export async function POST(request: NextRequest) {
           headers: { "Content-Type": "application/json" },
         }
       );
-    }
-    
-    // Handle JSON-RPC notifications/initialized request
-    if (body?.method === "notifications/initialized") {
-      console.log("[MCP] Received notifications/initialized");
-      return NextResponse.json({
-        jsonrpc: "2.0",
-        id: body.id ?? null,
-        result: {}
-      });
     }
     
     // Handle JSON-RPC tools/call request
