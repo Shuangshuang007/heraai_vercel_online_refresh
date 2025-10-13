@@ -564,7 +564,7 @@ export async function POST(request: NextRequest) {
               result: {
                 content: [{
                   type: "json",
-                  data: { content: { jobs: slimJobs, total: slimJobs.length } }
+                  data: { content: { jobs: slimJobs, total: result.total || slimJobs.length } }
                 }],
                 isError: false
               }
