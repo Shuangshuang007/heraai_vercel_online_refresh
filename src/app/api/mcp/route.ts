@@ -470,7 +470,7 @@ export async function POST(request: NextRequest) {
       
       // Route to appropriate tool handler with timeout protection
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Request timeout (8s)')), 8000);
+        setTimeout(() => reject(new Error('Request timeout (20s)')), 20000);
       });
 
       try {
