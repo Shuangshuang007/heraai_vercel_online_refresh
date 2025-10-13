@@ -567,3 +567,4 @@ curl -s -X POST https://www.heraai.net.au/api/mcp \
 
 **Questions?** Check `MCP_FAST_MODE_README.md` or Vercel dashboard logs.
 
+

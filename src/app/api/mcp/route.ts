@@ -65,54 +65,78 @@ async function withTimeout<T>(p: Promise<T>, ms: number = 5000): Promise<T> {
   ]);
 }
 
-// 安全日期转换函数
-function toISODateSafe(x: any): string | null {
-  if (!x) return null;
-
-  // Mongo Date 对象
-  if (x instanceof Date) {
-    const t = x.getTime();
-    return Number.isFinite(t) ? new Date(t).toISOString() : null;
-  }
-
-  // 数字：可能是秒/毫秒时间戳
-  if (typeof x === "number") {
-    const ms = x < 1e12 ? x * 1000 : x; // 秒 → 毫秒
-    const d = new Date(ms);
-    return Number.isFinite(d.getTime()) ? d.toISOString() : null;
-  }
-
-  // 字符串：尽量解析常见格式
-  if (typeof x === "string") {
-    const s = x.trim();
-    if (!s) return null;
-
-    // 1) 原生解析（ISO、"2025-10-13T12:30:00Z" 等）
-    const d0 = new Date(s);
-    if (Number.isFinite(d0.getTime())) return d0.toISOString();
-
-    // 2) "YYYY-MM-DD HH:mm"（无时区）→ 当作 UTC
-    const m1 = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
-    if (m1) {
-      const [, Y, M, D, h, mi, sec = "0"] = m1;
-      const d = new Date(Date.UTC(+Y, +M - 1, +D, +h, +mi, +sec));
-      return Number.isFinite(d.getTime()) ? d.toISOString() : null;
+// GPT建议：安全日期转换，带兜底
+function toIsoSafe(v: any, ...alts: any[]): string {
+  for (const x of [v, ...alts]) {
+    if (x && !Number.isNaN(Date.parse(x))) {
+      try {
+        return new Date(x).toISOString();
+      } catch {
+        continue;
+      }
     }
-
-    // 3) "DD/MM/YYYY" 或 "DD-MM-YYYY"
-    const m2 = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
-    if (m2) {
-      let [, d, m, y] = m2;
-      if (y.length === 2) y = "20" + y;
-      const dt = new Date(+y, +m - 1, +d);
-      return Number.isFinite(dt.getTime()) ? dt.toISOString() : null;
-    }
-
-    // 其它无法解析（如 "Closing soon"）→ 返回 null
-    return null;
   }
+  return new Date().toISOString(); // 兜底，避免 Invalid Date
+}
 
-  return null;
+// GPT建议：安全映射job，消灭非法值
+function mapJobSafe(j: any) {
+  const id = j._id || j.id || j.jobIdentifier || crypto.randomUUID();
+  const url =
+    j.url ||
+    j.jobUrl ||
+    `https://www.heraai.net.au/jobs/${encodeURIComponent(String(id))}?utm=chatgpt-mcp`;
+
+  return {
+    id: String(id),
+    title: String(j.title || ""),
+    company: String(j.company || j.company_name || ""),
+    location: String(j.location || j.locationRaw || ""),
+    employmentType: String(j.employmentType || j.employment_type || ""),
+    postDate: toIsoSafe(j.postedDateISO, j.postedDate, j.createdAt, j.updatedAt),
+    url,
+    platform: String(j.platform || j.source || j.source_label || "")
+  };
+}
+
+// GPT建议：安全MCP响应包装器
+function safeMcpOk(id: number | string | null, payload: any) {
+  const body = {
+    jsonrpc: "2.0",
+    id: id ?? null,
+    result: {
+      content: [
+        {
+          type: "json",
+          data: { content: payload }
+        }
+      ],
+      isError: false
+    }
+  };
+  console.info("[MCP RESPONSE 2KB]", JSON.stringify(body).slice(0, 2000));
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store"
+    }
+  });
+}
+
+function safeMcpErr(id: number | string | null, msg = "Hera Jobs temporary error") {
+  const body = {
+    jsonrpc: "2.0",
+    id: id ?? null,
+    result: {
+      content: [{ type: "text", text: msg }],
+      isError: true
+    }
+  };
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }
+  });
 }
 
 // ============================================
@@ -524,7 +548,7 @@ export async function POST(request: NextRequest) {
           if (requestMode === "fast") {
             const t0 = Date.now();
             const page = Math.max(1, Number(args?.page || 1));
-            const pageSize = Math.min(50, Math.max(1, Number(args?.page_size || args?.limit || 20)));
+            const pageSize = 5; // GPT建议：第一次固定5条，确认通了再放开
             
             // 只处理有效的参数，跳过 undefined
             const postedWithinDays = args?.posted_within_days && Number(args.posted_within_days) > 0 
@@ -592,47 +616,17 @@ export async function POST(request: NextRequest) {
             const elapsed = Date.now() - t0;
             const note = elapsed >= 8000 ? "timeout" : "completed";
 
-            // 使用安全日期转换，只返回ChatGPT需要的字段
-            const requestedLimit = Number(args?.limit || 5);
-            const limit = Math.min(Math.max(requestedLimit, 1), 10); // 最多10条
+            // GPT建议：第一次只回5条，控制体积 + 保证 < 8s
+            const HARD_DEADLINE_MS = 8000;
+            const limit = 5;
             const src: any[] = Array.isArray(result?.jobs) ? result.jobs : (Array.isArray(result) ? result : []);
+            
+            const safeJobs = src.slice(0, limit).map(mapJobSafe);
 
-            const safeJobs = src.slice(0, limit).map((j: any) => {
-              const rawDate = j?.postedDateISO ?? j?.postedAt ?? j?.createdAt ?? j?.updatedAt ?? null;
-              const postDate = toISODateSafe(rawDate);
-              const id = String(j?.id ?? j?._id ?? j?.jobIdentifier ?? "");
-              const url = j?.jobUrl || j?.url || `https://www.heraai.net.au/jobs/${encodeURIComponent(id)}`;
-
-              // 只返回ChatGPT需要的5个字段
-              return {
-                title: j?.title || "",
-                company: j?.company || j?.company_name || "",
-                location: j?.location || j?.locationRaw || "",
-                employmentType: j?.employmentType || "",
-                postDate,
-                url
-              };
-            });
-
-            // 严格按照ChatGPT MCP格式返回
-            return new Response(JSON.stringify({
-              jsonrpc: "2.0",
-              id: body.id ?? null,
-              result: {
-                content: [{
-                  type: "json",
-                  data: { 
-                    content: { 
-                      jobs: safeJobs, 
-                      total: safeJobs.length 
-                    } 
-                  }
-                }],
-                isError: false
-              }
-            }), { 
-              status: 200, 
-              headers: { "Content-Type": "application/json" } 
+            return safeMcpOk(body.id ?? null, {
+              mode: "fast",
+              total: result?.total || safeJobs.length,
+              jobs: safeJobs
             });
           }
 
