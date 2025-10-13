@@ -405,11 +405,20 @@ export async function POST(request: NextRequest) {
         },
       ];
 
+      // Map tools to use camelCase inputSchema for JSON-RPC compatibility
+      const rpcTools = tools.map(t => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.input_schema ?? t.inputSchema, // 兼容两种写法
+      }));
+
+      console.log("[MCP] tools/list count=" + rpcTools.length);
+
       return new Response(
         JSON.stringify({
           jsonrpc: "2.0",
           id: body.id ?? null,
-          result: { tools },
+          result: { tools: rpcTools },
         }),
         {
           status: 200,
