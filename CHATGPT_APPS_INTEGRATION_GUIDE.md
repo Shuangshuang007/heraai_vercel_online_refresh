@@ -27,12 +27,12 @@ Click "Create New App" or "Register App" and fill in the following information:
 
 **App Name:**
 ```
-Hera AI - Multi-Source Job Search
+HeraAI (hearai.net.au)
 ```
 
 **Short Description:**
 ```
-AI-powered job search across LinkedIn, SEEK, Jora & Adzuna with intelligent deduplication and match scoring
+Search AU/Global jobs using HeraAI's intelligent job aggregation system
 ```
 
 **Long Description:**
