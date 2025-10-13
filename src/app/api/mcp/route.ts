@@ -654,21 +654,27 @@ export async function POST(request: NextRequest) {
             
             const safeJobs = src.slice(0, limit).map(mapJobSafe);
             
-            // 生成Markdown卡片预览（iOS ChatGPT需要）
-            const markdownPreview = buildMarkdownCards(
-              { title: jobTitle, city }, 
-              safeJobs, 
-              result?.total || safeJobs.length
-            );
+            // 生成多个独立的text content（每个职位一个text块）
+            const content = [
+              {
+                type: "text",
+                text: `### 🔎 Top ${safeJobs.length} ${jobTitle} roles in ${city}`
+              },
+              ...safeJobs.slice(0, 5).map((job: any, index: number) => ({
+                type: "text",
+                text: `**${index + 1}) ${job.title}**  \n🏢 ${job.company}  \n📍 ${job.location}`
+              })),
+              {
+                type: "text",
+                text: `Total found: **${result?.total || safeJobs.length}** · Page **${1}**  \nReply *"more"* to view additional results.`
+              }
+            ];
 
-            // 测试：只返回text，不返回json（看是否是json导致问题）
             return new Response(JSON.stringify({
               jsonrpc: "2.0",
               id: body.id ?? null,
               result: {
-                content: [
-                  { type: "text", text: markdownPreview }
-                ],
+                content,
                 isError: false
               }
             }), {
