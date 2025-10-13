@@ -104,7 +104,139 @@ function hostOf(u?: string) {
   try { return new URL(u!).hostname; } catch { return ""; }
 }
 
-// 带View Details链接的卡片（ChatGPT支持Markdown链接）
+// 生成job highlights（使用OpenAI）
+async function generateJobHighlights(job: any): Promise<string[]> {
+  try {
+    const { OpenAI } = await import('openai');
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      baseURL: 'https://api.openai.com/v1',
+    });
+
+    // 构建完整的job信息给GPT
+    const jobInfo = `
+Job Title: ${job.title || ''}
+Company: ${job.company || job.organisation || ''}
+Location: ${job.location || ''}
+Employment Type: ${job.employmentType || ''}
+Experience Level: ${job.experience || 'Not specified'}
+
+Job Description:
+${(job.description || job.summary || '').substring(0, 1500)}
+
+${job.requirements && job.requirements.length > 0 ? `
+Requirements from Database:
+${job.requirements.join('\n')}
+` : ''}
+
+${job.skills && job.skills.length > 0 ? `
+Skills from Database:
+${job.skills.join(', ')}
+` : ''}
+
+${job.jobUrl || job.url ? `
+Job URL: ${job.jobUrl || job.url}
+` : ''}
+`.trim();
+
+    const prompt = `Analyze the following job posting and extract 2-3 key highlights:
+
+${jobInfo}
+
+CRITICAL REQUIREMENTS:
+1. First Highlight - Experience & Company:
+   - Format: "[Company type/industry] seeking [specific years] experience"
+   - MUST include EXACT years of experience (e.g., "5+ years", "3-5 years", "2+ years")
+   - Extract from "Experience Level" field OR job description
+   - If experience not specified, write "seeking experienced professional"
+   - Example: "Global tech company seeking 8+ years experience"
+   - Example: "Leading bank seeking 3-5 years experience"
+   - DO NOT use vague terms like "senior" or "mid-level" without years
+
+2. Second Highlight - Hard Requirements (MOST IMPORTANT):
+   - Format: "Requires: [skill1, skill2, skill3, skill4]"
+   - ONLY include technical skills, tools, certifications, or licenses
+   - Extract from "Requirements from Database" and "Skills from Database" sections
+   - Prioritize hard/technical requirements over soft skills
+   - List 3-5 most important requirements
+   - Example: "Requires: Python, AWS, Docker, Kubernetes, CI/CD"
+   - Example: "Requires: CPA, SAP, Excel, SQL"
+   - DO NOT include: location, years of experience, soft skills (teamwork, communication, etc.)
+
+3. Third Highlight - Special Requirements or Benefits (OPTIONAL):
+   - ONLY include if explicitly mentioned in job description
+   - Focus on: visa/citizenship requirements, sponsorship, remote work, unique benefits
+   - Example: "Australian PR or citizenship required"
+   - Example: "Visa sponsorship available for qualified candidates"
+   - Example: "Fully remote with flexible hours"
+   - If nothing specific, DO NOT output this highlight
+
+FORMATTING:
+- Each highlight must be ONE sentence, max 15 words
+- Start each highlight with "•"
+- Be specific and factual, no marketing language
+- Extract from the provided data, do not make assumptions
+
+Output format:
+• [highlight 1]
+• [highlight 2]
+• [highlight 3]  (only if applicable)`;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo-1106',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 180,
+      temperature: 0.2,
+    });
+
+    const response = completion.choices[0]?.message?.content || '';
+    
+    // 解析highlights
+    const highlights = response
+      .split('\n')
+      .filter(line => line.trim().startsWith('•'))
+      .map(line => line.trim().substring(1).trim())
+      .filter(h => h.length > 0);
+    
+    // Fallback逻辑：使用数据库字段
+    if (highlights.length === 0) {
+      const fallbackHighlights: string[] = [];
+      
+      // Fallback 1: 公司 + 经验
+      const experienceText = job.experience || 'experienced professional';
+      fallbackHighlights.push(
+        `${job.company || 'Company'} seeking ${experienceText}`
+      );
+      
+      // Fallback 2: 技能要求
+      if (job.skills && job.skills.length > 0) {
+        const topSkills = job.skills.slice(0, 5).join(', ');
+        fallbackHighlights.push(`Requires: ${topSkills}`);
+      } else if (job.requirements && job.requirements.length > 0) {
+        const topReqs = job.requirements.slice(0, 3).join(', ');
+        fallbackHighlights.push(`Requirements: ${topReqs}`);
+      } else {
+        fallbackHighlights.push('View details for full requirements');
+      }
+      
+      return fallbackHighlights;
+    }
+    
+    return highlights;
+  } catch (error) {
+    console.error('[MCP] Highlights generation error:', error);
+    
+    // 错误时的fallback
+    return [
+      `${job.company || 'Company'} seeking ${job.experience || 'candidate'}`,
+      job.skills && job.skills.length > 0 
+        ? `Requires: ${job.skills.slice(0, 5).join(', ')}`
+        : 'View details for requirements'
+    ];
+  }
+}
+
+// 带Highlights和View Details链接的卡片（ChatGPT支持Markdown链接）
 function buildMarkdownCards(q: { title: string; city: string }, jobs: any[], total: number) {
   const cards = jobs.slice(0, 5).map((j: any, idx: number) => {
     const title = (j.title || "").replace(/[–—]/g, "-").trim();
@@ -112,10 +244,31 @@ function buildMarkdownCards(q: { title: string; city: string }, jobs: any[], tot
     const loc = (j.location || "").trim();
     const url = j.url || "";
 
-    // 如果有URL，添加View Details链接
+    // Highlights显示（如果有）
+    const highlightLines = (j.highlights || []).map((h: string) => {
+      return `   📌 ${h}`;
+    }).join('\n');
+
+    // View Details链接
     const viewDetailsLink = url ? `\n   [View Details](${url})` : "";
 
-    return `${idx + 1}. ${title}\n   ${company}\n   ${loc}${viewDetailsLink}`;
+    // 组合：标题、公司、地点、highlights、View Details
+    const parts = [
+      `${idx + 1}. ${title}`,
+      `   ${company}`,
+      `   ${loc}`
+    ];
+    
+    if (highlightLines) {
+      parts.push(''); // 空行
+      parts.push(highlightLines);
+    }
+    
+    if (viewDetailsLink) {
+      parts.push(viewDetailsLink);
+    }
+
+    return parts.join('\n');
   });
 
   return [
@@ -244,7 +397,7 @@ async function fastDbQuery(params: FastQueryParams): Promise<{
       updatedAt: -1
     };
 
-    // Projection: Only necessary fields
+    // Projection: Include fields needed for highlights generation
     const projection = {
       id: 1,
       _id: 1,
@@ -264,6 +417,14 @@ async function fastDbQuery(params: FastQueryParams): Promise<{
       source: 1,
       sourceType: 1,
       platform: 1,
+      // ✅ Additional fields for highlights generation
+      description: 1,
+      summary: 1,
+      requirements: 1,
+      skills: 1,
+      experience: 1,
+      benefits: 1,
+      workMode: 1,
     };
 
     // Pagination
@@ -656,9 +817,36 @@ export async function POST(request: NextRequest) {
             const limit = 5;
             const src: any[] = Array.isArray(result?.jobs) ? result.jobs : (Array.isArray(result) ? result : []);
             
-            const safeJobs = src.slice(0, limit).map(mapJobSafe);
+            // 并发生成highlights（使用原始job数据，包含description等字段）
+            const jobsWithHighlights = await Promise.all(
+              src.slice(0, limit).map(async (job: any) => {
+                try {
+                  const highlights = await withTimeout(
+                    generateJobHighlights(job),
+                    3000 // 每个job最多3秒
+                  );
+                  return { ...job, highlights };
+                } catch (error) {
+                  console.error('[MCP] Highlights timeout for job:', job.id || job._id);
+                  // Fallback: 使用数据库字段
+                  const fallbackHighlights = [
+                    `${job.company || 'Company'} seeking ${job.experience || 'candidate'}`,
+                    job.skills && job.skills.length > 0 
+                      ? `Requires: ${job.skills.slice(0, 5).join(', ')}`
+                      : 'View details for requirements'
+                  ];
+                  return { ...job, highlights: fallbackHighlights };
+                }
+              })
+            );
             
-            // 生成Markdown卡片预览（iOS ChatGPT需要）
+            // 映射为安全格式（保留highlights）
+            const safeJobs = jobsWithHighlights.map((j: any) => ({
+              ...mapJobSafe(j),
+              highlights: j.highlights || []
+            }));
+            
+            // 生成Markdown卡片预览（iOS ChatGPT需要，现在包含highlights）
             const markdownPreview = buildMarkdownCards(
               { title: jobTitle, city }, 
               safeJobs, 
