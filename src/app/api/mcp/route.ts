@@ -323,7 +323,160 @@ export async function POST(request: NextRequest) {
     // Log raw body for debugging
     console.log('[MCP] Raw body:', JSON.stringify(body).substring(0, 200));
     
-    // Compatible field parsing (support both name/tool and arguments/args)
+    // Handle JSON-RPC initialize handshake
+    if (body?.method === "initialize") {
+      console.log("[MCP] Received initialize handshake:", body);
+
+      return NextResponse.json({
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: {
+          capabilities: {
+            tools: true,  // Tell ChatGPT we have tool capabilities
+          },
+          serverInfo: {
+            name: "Hera Jobs MCP Server",
+            version: "1.0.0",
+          },
+        },
+      });
+    }
+    
+    // Handle JSON-RPC tools/list request
+    if (body?.method === "tools/list") {
+      console.log("[MCP] Received tools/list request:", body);
+      
+      // Return the same tools manifest as GET endpoint
+      const tools = [
+        {
+          name: 'search_jobs',
+          description: '[MULTI-SOURCE JOB SEARCH] Aggregate jobs from LinkedIn, SEEK, Jora, and Adzuna with intelligent deduplication, AI-powered match scoring, and deal-breaker filtering.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              job_title: { type: 'string', description: 'Job title, role, or keywords' },
+              city: { type: 'string', description: 'City name' },
+              country_code: { type: 'string', default: 'AU' },
+              sources: { type: 'array', default: ['all'] },
+              enable_deduplication: { type: 'boolean', default: true },
+              limit: { type: 'integer', minimum: 1, maximum: 25, default: 10 }
+            },
+            required: ['job_title', 'city'],
+            additionalProperties: false
+          }
+        },
+        {
+          name: 'build_search_links',
+          description: '[DEEP LINKS GENERATOR] Generate direct search URLs for LinkedIn, SEEK, Jora, and Adzuna.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              job_title: { type: 'string', description: 'Job title or keywords' },
+              city: { type: 'string', description: 'City name' },
+              country_code: { type: 'string', default: 'AU' },
+              platforms: { type: 'array', default: ['linkedin', 'seek', 'jora', 'adzuna'] }
+            },
+            required: ['job_title', 'city'],
+            additionalProperties: false
+          }
+        },
+        {
+          name: 'get_user_applications',
+          description: '[APPLICATION TRACKER] Retrieve user\'s complete job application history.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              user_email: { type: 'string', format: 'email', description: 'User\'s email address' },
+              status_filter: { type: 'string', default: 'all' }
+            },
+            required: ['user_email'],
+            additionalProperties: false
+          }
+        }
+      ];
+
+      return NextResponse.json({
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: { tools }
+      });
+    }
+    
+    // Handle JSON-RPC tools/call request
+    if (body?.method === "tools/call") {
+      console.log("[MCP] Received tools/call request:", body);
+      
+      const toolName = body.params?.name;
+      const args = body.params?.arguments || {};
+      
+      if (!toolName) {
+        return NextResponse.json({
+          jsonrpc: "2.0",
+          id: body.id ?? null,
+          error: {
+            code: -32602,
+            message: "Invalid params: missing tool name"
+          }
+        });
+      }
+      
+      // Normalize parameter names (camelCase to snake_case)
+      const normalizedArgs = normalizeArgs(args);
+      
+      // Route to appropriate tool handler with timeout protection
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout (8s)')), 8000);
+      });
+
+      let result;
+      switch (toolName) {
+        case 'search_jobs':
+          result = await Promise.race([
+            handleSearchJobs(normalizedArgs),
+            timeoutPromise
+          ]);
+          break;
+
+        case 'build_search_links':
+          result = await Promise.race([
+            handleBuildSearchLinks(normalizedArgs),
+            timeoutPromise
+          ]);
+          break;
+
+        case 'get_user_applications':
+          result = await Promise.race([
+            handleGetApplications(normalizedArgs),
+            timeoutPromise
+          ]);
+          break;
+
+        default:
+          return NextResponse.json({
+            jsonrpc: "2.0",
+            id: body.id ?? null,
+            error: {
+              code: -32601,
+              message: `Tool '${toolName}' not found`
+            }
+          });
+      }
+
+      const duration = Date.now() - startTime;
+      console.log('[MCP] JSON-RPC tools/call response:', {
+        status: 200,
+        durationMs: duration,
+        tool: toolName
+      });
+
+      return NextResponse.json({
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: result
+      });
+    }
+    
+    // Legacy compatible field parsing (support both name/tool and arguments/args)
     const toolName = body.name ?? body.tool;
     let args = body.arguments ?? body.args ?? {};
     
