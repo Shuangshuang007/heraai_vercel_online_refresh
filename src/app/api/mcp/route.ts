@@ -104,14 +104,18 @@ function hostOf(u?: string) {
   try { return new URL(u!).hostname; } catch { return ""; }
 }
 
-// 极简卡片：只显示职位、公司、地点（避免iOS渲染失败）
+// 带View Details链接的卡片（ChatGPT支持Markdown链接）
 function buildMarkdownCards(q: { title: string; city: string }, jobs: any[], total: number) {
   const cards = jobs.slice(0, 5).map((j: any, idx: number) => {
     const title = (j.title || "").replace(/[–—]/g, "-").trim();
     const company = (j.company || "").trim();
     const loc = (j.location || "").trim();
+    const url = j.url || "";
 
-    return `${idx + 1}. ${title}\n   ${company}\n   ${loc}`;
+    // 如果有URL，添加View Details链接
+    const viewDetailsLink = url ? `\n   [View Details](${url})` : "";
+
+    return `${idx + 1}. ${title}\n   ${company}\n   ${loc}${viewDetailsLink}`;
   });
 
   return [
@@ -654,27 +658,21 @@ export async function POST(request: NextRequest) {
             
             const safeJobs = src.slice(0, limit).map(mapJobSafe);
             
-            // 生成多个独立的text content（每个职位一个text块）
-            const content = [
-              {
-                type: "text",
-                text: `### 🔎 Top ${safeJobs.length} ${jobTitle} roles in ${city}`
-              },
-              ...safeJobs.slice(0, 5).map((job: any, index: number) => ({
-                type: "text",
-                text: `**${index + 1}) ${job.title}**  \n🏢 ${job.company}  \n📍 ${job.location}`
-              })),
-              {
-                type: "text",
-                text: `Total found: **${result?.total || safeJobs.length}** · Page **${1}**  \nReply *"more"* to view additional results.`
-              }
-            ];
+            // 生成Markdown卡片预览（iOS ChatGPT需要）
+            const markdownPreview = buildMarkdownCards(
+              { title: jobTitle, city }, 
+              safeJobs, 
+              result?.total || safeJobs.length
+            );
 
+            // 测试：只返回text，不返回json（看是否是json导致问题）
             return new Response(JSON.stringify({
               jsonrpc: "2.0",
               id: body.id ?? null,
               result: {
-                content,
+                content: [
+                  { type: "text", text: markdownPreview }
+                ],
                 isError: false
               }
             }), {
