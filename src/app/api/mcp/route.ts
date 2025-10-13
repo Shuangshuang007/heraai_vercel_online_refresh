@@ -409,7 +409,7 @@ export async function POST(request: NextRequest) {
       const rpcTools = tools.map(t => ({
         name: t.name,
         description: t.description,
-        inputSchema: t.input_schema ?? t.inputSchema, // 兼容两种写法
+        inputSchema: t.input_schema, // Convert snake_case to camelCase
       }));
 
       console.log("[MCP] tools/list count=" + rpcTools.length);
