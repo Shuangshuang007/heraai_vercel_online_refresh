@@ -324,7 +324,7 @@ export async function POST(request: NextRequest) {
     console.log('[MCP] Raw body:', JSON.stringify(body).substring(0, 200));
     
     // Handle JSON-RPC notifications (no id, no response needed)
-    if (body.id === undefined && body.method?.startsWith('notifications/')) {
+    if (!body.id && body.method?.startsWith('notifications/')) {
       console.log(`[MCP] Received notification: ${body.method}`);
       return new Response(null, { status: 204 });
     }
