@@ -331,8 +331,9 @@ export async function POST(request: NextRequest) {
         jsonrpc: "2.0",
         id: body.id ?? null,
         result: {
+          protocolVersion: "2024-11-05",  // MCP protocol version
           capabilities: {
-            tools: true,  // Tell ChatGPT we have tool capabilities
+            tools: {},  // MCP spec requires empty object, not true
           },
           serverInfo: {
             name: "Hera Jobs MCP Server",
@@ -481,10 +482,25 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Handle NextResponse objects returned by tool handlers
+        let contentData;
+        if (result && typeof result === 'object' && 'content' in result) {
+          // If result is a NextResponse-like object with content
+          contentData = result.content;
+        } else {
+          // If result is plain data
+          contentData = result;
+        }
+
         return NextResponse.json({
           jsonrpc: "2.0",
           id: body.id ?? null,
-          result: { content: result }
+          result: { 
+            content: [
+              { type: "text", text: JSON.stringify(contentData) }
+            ],
+            isError: false
+          }
         });
       } catch (e: any) {
         console.error("[MCP] Tool error", e);
