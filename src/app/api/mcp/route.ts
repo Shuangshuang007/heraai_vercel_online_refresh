@@ -99,18 +99,67 @@ function mapJobSafe(j: any) {
   };
 }
 
-// GPT建议：安全MCP响应包装器
-function safeMcpOk(id: number | string | null, payload: any) {
+// GPT建议：生成Markdown卡片预览（iOS ChatGPT需要text类型）
+function buildMarkdownCards(q: { title: string; city: string }, jobs: any[], total: number) {
+  const emojiByPlatform: Record<string, string> = {
+    Seek: "🔎",
+    LinkedIn: "💼",
+    Jora: "📋",
+    Adzuna: "🌐",
+    Indeed: "🧩",
+  };
+
+  const cards = jobs.slice(0, 5).map((j: any) => {
+    const title = j.title?.replace(/[–—]/g, "-") || "(Untitled)";
+    const company = j.company || "Unknown company";
+    const loc = j.location || q.city || "";
+    const date =
+      j.postDate?.slice(0, 10) ||
+      j.postedDateISO?.slice(0, 10) ||
+      "recent";
+    const url = j.url || "";
+    const platform = j.platform || "";
+    const emoji = emojiByPlatform[platform] || "💼";
+
+    return [
+      `**${emoji} [${title}](${url})**`,
+      `🏢 ${company}`,
+      `📍 ${loc}`,
+      `🕒 ${date}`,
+      platform ? `🔗 Source: ${platform}` : "",
+    ]
+      .filter(Boolean)
+      .join("  \n"); // 两个空格换行
+  });
+
+  return [
+    `### 🔍 Top ${Math.min(5, jobs.length)} "${q.title}" roles in ${q.city}`,
+    "",
+    cards.join("\n\n---\n\n"),
+    "",
+    `Total found: **${total}** jobs. Reply *"more"* to see additional results.`,
+  ].join("\n");
+}
+
+// GPT建议：安全MCP响应包装器（同时返回text+json）
+function safeMcpOk(id: number | string | null, payload: any, textPreview?: string) {
+  const content: any[] = [];
+  
+  // iOS ChatGPT需要text类型才能正常渲染
+  if (textPreview) {
+    content.push({ type: "text", text: textPreview });
+  }
+  
+  content.push({
+    type: "json",
+    data: { content: payload }
+  });
+
   const body = {
     jsonrpc: "2.0",
     id: id ?? null,
     result: {
-      content: [
-        {
-          type: "json",
-          data: { content: payload }
-        }
-      ],
+      content,
       isError: false
     }
   };
@@ -622,12 +671,23 @@ export async function POST(request: NextRequest) {
             const src: any[] = Array.isArray(result?.jobs) ? result.jobs : (Array.isArray(result) ? result : []);
             
             const safeJobs = src.slice(0, limit).map(mapJobSafe);
+            
+            // 生成Markdown卡片预览（iOS ChatGPT需要）
+            const markdownPreview = buildMarkdownCards(
+              { title: jobTitle, city }, 
+              safeJobs, 
+              result?.total || safeJobs.length
+            );
 
-            return safeMcpOk(body.id ?? null, {
-              mode: "fast",
-              total: result?.total || safeJobs.length,
-              jobs: safeJobs
-            });
+            return safeMcpOk(
+              body.id ?? null, 
+              {
+                mode: "fast",
+                total: result?.total || safeJobs.length,
+                jobs: safeJobs
+              },
+              markdownPreview // 添加text预览
+            );
           }
 
           // ============================================
