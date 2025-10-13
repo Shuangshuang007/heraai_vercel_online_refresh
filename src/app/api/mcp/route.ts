@@ -535,7 +535,7 @@ export async function POST(request: NextRequest) {
 
             // GPT建议：极瘦映射 + 压缩，确保稳定返回
             const limit = Math.min(Number(args?.limit || 20), 20);
-            const src = Array.isArray(result?.jobs) ? result.jobs : (result || []);
+            const src: any[] = Array.isArray(result?.jobs) ? result.jobs : (Array.isArray(result) ? result : []);
             const slimJobs = src.slice(0, limit).map((j: any) => {
               const id = String(j?.id ?? j?._id ?? j?.jobIdentifier ?? "");
               const postDate = j?.postedDateISO || j?.postedAt || j?.createdAt || j?.updatedAt || null;
