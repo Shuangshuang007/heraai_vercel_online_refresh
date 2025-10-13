@@ -661,15 +661,23 @@ export async function POST(request: NextRequest) {
               result?.total || safeJobs.length
             );
 
-            return safeMcpOk(
-              body.id ?? null, 
-              {
-                mode: "fast",
-                total: result?.total || safeJobs.length,
-                jobs: safeJobs
-              },
-              markdownPreview // 添加text预览
-            );
+            // 测试：只返回text，不返回json（看是否是json导致问题）
+            return new Response(JSON.stringify({
+              jsonrpc: "2.0",
+              id: body.id ?? null,
+              result: {
+                content: [
+                  { type: "text", text: markdownPreview }
+                ],
+                isError: false
+              }
+            }), {
+              status: 200,
+              headers: {
+                "content-type": "application/json; charset=utf-8",
+                "cache-control": "no-store"
+              }
+            });
           }
 
           // ============================================
