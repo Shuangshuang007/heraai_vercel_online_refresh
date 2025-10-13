@@ -99,7 +99,12 @@ function mapJobSafe(j: any) {
   };
 }
 
-// GPT建议：生成Markdown卡片预览（iOS ChatGPT需要text类型）
+// GPT建议：提取域名（不挂超链接，避免长URL导致渲染失败）
+function hostOf(u?: string) {
+  try { return new URL(u!).hostname; } catch { return ""; }
+}
+
+// GPT建议：生成Markdown卡片预览（不挂链接，只显示域名）
 function buildMarkdownCards(q: { title: string; city: string }, jobs: any[], total: number) {
   const emojiByPlatform: Record<string, string> = {
     Seek: "🔎",
@@ -120,13 +125,17 @@ function buildMarkdownCards(q: { title: string; city: string }, jobs: any[], tot
     const url = j.url || "";
     const platform = j.platform || "";
     const emoji = emojiByPlatform[platform] || "💼";
+    
+    // 只显示域名，不挂超链接（避免长URL导致iOS渲染失败）
+    const host = hostOf(url);
+    const hostLine = host ? `🔗 ${host}` : "";
 
     return [
-      `**${emoji} [${title}](${url})**`,
+      `**${emoji} ${title}**`,
       `🏢 ${company}`,
       `📍 ${loc}`,
       `🕒 ${date}`,
-      platform ? `🔗 Source: ${platform}` : "",
+      hostLine,
     ]
       .filter(Boolean)
       .join("  \n"); // 两个空格换行
