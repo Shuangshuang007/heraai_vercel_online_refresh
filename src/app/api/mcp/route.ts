@@ -428,6 +428,16 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    // Handle JSON-RPC notifications/initialized request
+    if (body?.method === "notifications/initialized") {
+      console.log("[MCP] Received notifications/initialized");
+      return NextResponse.json({
+        jsonrpc: "2.0",
+        id: body.id ?? null,
+        result: {}
+      });
+    }
+    
     // Handle JSON-RPC tools/call request
     if (body?.method === "tools/call") {
       const { params } = body;
