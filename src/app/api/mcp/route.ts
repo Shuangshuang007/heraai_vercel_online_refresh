@@ -532,7 +532,12 @@ export async function POST(request: NextRequest) {
             const platforms = Array.isArray(args?.platforms) && args.platforms.length > 0 
               ? args.platforms : undefined;
 
-            console.info("[TRACE]", traceId, "FAST mode:", { page, pageSize, postedWithinDays, platforms, limit: args?.limit });
+            // 只打印有效的参数，跳过 undefined
+            const logParams: any = { page, pageSize };
+            if (args?.limit) logParams.limit = args.limit;
+            if (postedWithinDays) logParams.postedWithinDays = postedWithinDays;
+            if (platforms) logParams.platforms = platforms;
+            console.info("[TRACE]", traceId, "FAST mode:", logParams);
 
             let result;
             try {
@@ -587,44 +592,41 @@ export async function POST(request: NextRequest) {
             const elapsed = Date.now() - t0;
             const note = elapsed >= 8000 ? "timeout" : "completed";
 
-            // 使用安全日期转换，避免 toISOString() 错误
-            const requestedLimit = Number(args?.limit || 10);
-            const limit = Math.min(Math.max(requestedLimit, 1), 50); // 确保在1-50范围内
+            // 使用安全日期转换，只返回ChatGPT需要的字段
+            const requestedLimit = Number(args?.limit || 5);
+            const limit = Math.min(Math.max(requestedLimit, 1), 10); // 最多10条
             const src: any[] = Array.isArray(result?.jobs) ? result.jobs : (Array.isArray(result) ? result : []);
 
-            let invalidDateCount = 0;
-
             const safeJobs = src.slice(0, limit).map((j: any) => {
-              const id = String(j?.id ?? j?._id ?? j?.jobIdentifier ?? "");
               const rawDate = j?.postedDateISO ?? j?.postedAt ?? j?.createdAt ?? j?.updatedAt ?? null;
               const postDate = toISODateSafe(rawDate);
-              if (!postDate && rawDate) invalidDateCount++;
+              const id = String(j?.id ?? j?._id ?? j?.jobIdentifier ?? "");
+              const url = j?.jobUrl || j?.url || `https://www.heraai.net.au/jobs/${encodeURIComponent(id)}`;
 
-              const url =
-                (typeof j?.jobUrl === "string" && j.jobUrl) ? j.jobUrl :
-                (typeof j?.url === "string" && j.url) ? j.url :
-                `https://www.heraai.net.au/jobs/${encodeURIComponent(id)}?utm=chatgpt-mcp`;
-
+              // 只返回ChatGPT需要的5个字段
               return {
-                id,
-                title:   j?.title ?? "",
-                company: j?.company ?? j?.company_name ?? "",
-                location: j?.location ?? j?.locationRaw ?? "",
-                employmentType: j?.employmentType ?? "",
-                postDate,        // ← 安全 ISO 或 null，不会抛错
-                url,
-                platform: j?.source_label ?? j?.platform ?? j?.sourceType ?? ""
+                title: j?.title || "",
+                company: j?.company || j?.company_name || "",
+                location: j?.location || j?.locationRaw || "",
+                employmentType: j?.employmentType || "",
+                postDate,
+                url
               };
             });
 
-            // 永远 200 返回（不要在顶层放 error）
+            // 严格按照ChatGPT MCP格式返回
             return new Response(JSON.stringify({
               jsonrpc: "2.0",
               id: body.id ?? null,
               result: {
                 content: [{
                   type: "json",
-                  data: { content: { jobs: safeJobs, total: safeJobs.length, invalidDates: invalidDateCount } }
+                  data: { 
+                    content: { 
+                      jobs: safeJobs, 
+                      total: safeJobs.length 
+                    } 
+                  }
                 }],
                 isError: false
               }
