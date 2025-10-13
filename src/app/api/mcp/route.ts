@@ -128,9 +128,8 @@ async function fastDbQuery(params: FastQueryParams): Promise<{
       });
     }
 
-    // Sorting: Try sortDate first (if exists), fallback to multi-field
+    // Sorting: Use postedDateISO, fallback to createdAt
     const sort: any = {
-      sortDate: -1,
       postedDateISO: -1,
       createdAt: -1,
       updatedAt: -1
@@ -153,7 +152,6 @@ async function fastDbQuery(params: FastQueryParams): Promise<{
       postedDateRaw: 1,
       createdAt: 1,
       updatedAt: 1,
-      sortDate: 1,
       source: 1,
       sourceType: 1,
       platform: 1,
@@ -502,9 +500,8 @@ export async function POST(request: NextRequest) {
 
             // Map jobs to response format
             const jobs = result.jobs.map((j: any) => {
-              // Determine posted date (priority: postedDateISO > sortDate > createdAt > updatedAt)
+              // Determine posted date (priority: postedDateISO > createdAt > updatedAt)
               const posted =
-                j.sortDate ||
                 j.postedDateISO ||
                 j.postedDate ||
                 j.postedDateRaw ||
