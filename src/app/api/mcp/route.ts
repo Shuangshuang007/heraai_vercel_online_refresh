@@ -287,16 +287,22 @@ Ideal for: Users seeking comprehensive job coverage beyond single platforms.`,
     toolsCount: tools.length
   });
 
-  // Return tools manifest immediately with cache headers
-  return NextResponse.json(
-    { tools },
-    {
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'public, max-age=300',
-      },
-    }
-  );
+  // Return simplified tools manifest for browser health check
+  const simplifiedTools = tools.map(t => ({
+    name: t.name,
+    description: t.description,
+    input_schema: t.input_schema
+  }));
+
+  return new Response(JSON.stringify({
+    tools: simplifiedTools
+  }), { 
+    status: 200, 
+    headers: { 
+      "Content-Type": "application/json",
+      "Cache-Control": "public, max-age=300"
+    } 
+  });
 }
 
 // ============================================
@@ -337,7 +343,7 @@ export async function POST(request: NextRequest) {
         jsonrpc: "2.0",
         id: body.id ?? null,
         result: {
-          protocolVersion: "2024-11-05",  // MCP protocol version
+          protocolVersion: "2025-06-18",  // MCP protocol version
           capabilities: {
             tools: {},  // MCP spec requires empty object, not true
           },
@@ -357,23 +363,18 @@ export async function POST(request: NextRequest) {
       const tools = [
         {
           name: "search_jobs",
-          description: "Search and aggregate jobs from multiple platforms (LinkedIn, SEEK, Jora, Adzuna).",
+          description: "Search and aggregate jobs across multiple AU/Global sources.",
           input_schema: {
             type: "object",
             properties: {
               job_title: { type: "string", minLength: 1 },
               city: { type: "string", minLength: 1 },
               country_code: { type: "string", default: "AU" },
-              sources: {
-                type: "array",
-                items: { type: "string", enum: ["all", "linkedin", "seek", "jora", "adzuna", "indeed"] },
-                default: ["all"],
-              },
-              enable_deduplication: { type: "boolean", default: true },
-              limit: { type: "integer", default: 5, minimum: 1, maximum: 20 },
+              limit: { type: "integer", minimum: 1, maximum: 20, default: 5 }
             },
             required: ["job_title", "city"],
-          },
+            additionalProperties: false
+          }
         },
         {
           name: "build_search_links",
@@ -412,11 +413,13 @@ export async function POST(request: NextRequest) {
         },
       ];
 
-      // Map tools to use camelCase inputSchema for JSON-RPC compatibility
       const rpcTools = tools.map(t => ({
         name: t.name,
         description: t.description,
-        inputSchema: t.input_schema, // Convert snake_case to camelCase
+        inputSchema: {
+          $schema: "http://json-schema.org/draft-07/schema#",
+          ...t.input_schema
+        }
       }));
 
       console.log("[MCP] tools/list count=" + rpcTools.length);
