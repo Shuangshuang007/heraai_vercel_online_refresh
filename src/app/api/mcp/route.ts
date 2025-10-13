@@ -533,37 +533,50 @@ export async function POST(request: NextRequest) {
             const elapsed = Date.now() - t0;
             const note = elapsed >= 8000 ? "timeout" : "completed";
 
-            return json200(
-              {
-                jsonrpc: "2.0",
-                id: body.id ?? null,
-                result: {
-                  content: [{
-                    type: "json",
-                    data: {
-                      content: {
-                        mode: "fast",
-                        jobs,
-                        total: result.total,
-                        page: result.page,
-                        page_size: result.pageSize,
-                        has_more: result.hasMore,
-                        query: `${jobTitle} in ${city}`,
-                        note,
-                        elapsed_ms: elapsed,
-                        timestamp: new Date().toISOString(),
-                      }
-                    }
-                  }],
-                  isError: false
-                }
-              },
-              { 
+            // GPT建议：极瘦映射 + 压缩，确保稳定返回
+            const limit = Math.min(Number(args?.limit || 20), 20);
+            const src = Array.isArray(result?.jobs) ? result.jobs : (result || []);
+            const slimJobs = src.slice(0, limit).map((j: any) => {
+              const id = String(j?.id ?? j?._id ?? j?.jobIdentifier ?? "");
+              const postDate = j?.postedDateISO || j?.postedAt || j?.createdAt || j?.updatedAt || null;
+              const url =
+                (typeof j?.jobUrl === "string" && j.jobUrl) ? j.jobUrl :
+                (typeof j?.url === "string" && j.url) ? j.url :
+                `https://www.heraai.net.au/jobs/${encodeURIComponent(id)}?utm=chatgpt-mcp`;
+
+              return {
+                id,
+                title: j?.title ?? "",
+                company: j?.company ?? j?.company_name ?? "",
+                location: j?.location ?? j?.locationRaw ?? "",
+                employmentType: j?.employmentType ?? "",
+                postDate: postDate ? new Date(postDate).toISOString() : null,
+                url,
+                platform: j?.source_label ?? j?.platform ?? j?.sourceType ?? ""
+              };
+            });
+
+            // 严格 JSON-RPC 外壳 + ChatGPT Apps 期望的 content 形状
+            const bodyId = Number.isFinite(body?.id) ? body.id : null;
+            return new Response(JSON.stringify({
+              jsonrpc: "2.0",
+              id: bodyId,
+              result: {
+                content: [{
+                  type: "json",
+                  data: { content: { jobs: slimJobs, total: slimJobs.length } }
+                }],
+                isError: false
+              }
+            }), { 
+              status: 200, 
+              headers: { 
+                "Content-Type": "application/json",
                 "X-MCP-Trace-Id": traceId,
                 "X-MCP-Mode": "fast",
                 "X-MCP-Elapsed": String(elapsed)
-              }
-            );
+              } 
+            });
           }
 
           // ============================================
