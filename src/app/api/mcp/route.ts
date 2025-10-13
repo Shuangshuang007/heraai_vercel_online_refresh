@@ -104,49 +104,22 @@ function hostOf(u?: string) {
   try { return new URL(u!).hostname; } catch { return ""; }
 }
 
-// GPT建议：生成Markdown卡片预览（不挂链接，只显示域名）
+// 极简卡片：只显示职位、公司、地点（避免iOS渲染失败）
 function buildMarkdownCards(q: { title: string; city: string }, jobs: any[], total: number) {
-  const emojiByPlatform: Record<string, string> = {
-    Seek: "🔎",
-    LinkedIn: "💼",
-    Jora: "📋",
-    Adzuna: "🌐",
-    Indeed: "🧩",
-  };
+  const cards = jobs.slice(0, 5).map((j: any, idx: number) => {
+    const title = (j.title || "").replace(/[–—]/g, "-").trim();
+    const company = (j.company || "").trim();
+    const loc = (j.location || "").trim();
 
-  const cards = jobs.slice(0, 5).map((j: any) => {
-    const title = j.title?.replace(/[–—]/g, "-") || "(Untitled)";
-    const company = j.company || "Unknown company";
-    const loc = j.location || q.city || "";
-    const date =
-      j.postDate?.slice(0, 10) ||
-      j.postedDateISO?.slice(0, 10) ||
-      "recent";
-    const url = j.url || "";
-    const platform = j.platform || "";
-    const emoji = emojiByPlatform[platform] || "💼";
-    
-    // 只显示域名，不挂超链接（避免长URL导致iOS渲染失败）
-    const host = hostOf(url);
-    const hostLine = host ? `🔗 ${host}` : "";
-
-    return [
-      `**${emoji} ${title}**`,
-      `🏢 ${company}`,
-      `📍 ${loc}`,
-      `🕒 ${date}`,
-      hostLine,
-    ]
-      .filter(Boolean)
-      .join("  \n"); // 两个空格换行
+    return `${idx + 1}. ${title}\n   ${company}\n   ${loc}`;
   });
 
   return [
-    `### 🔍 Top ${Math.min(5, jobs.length)} "${q.title}" roles in ${q.city}`,
+    `Found ${total} jobs for "${q.title}" in ${q.city}`,
     "",
-    cards.join("\n\n---\n\n"),
+    cards.join("\n\n"),
     "",
-    `Total found: **${total}** jobs. Reply *"more"* to see additional results.`,
+    `Reply "more" for next 5 results.`,
   ].join("\n");
 }
 
