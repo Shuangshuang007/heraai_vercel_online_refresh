@@ -37,10 +37,10 @@ import {
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 // --- Stage time budgets (milliseconds) ---
-const TOTAL_BUDGET_MS = 18000;   // 整体最长 18s
-const GPT_TIMEOUT_MS  = 6000;    // GPT 阶段预算 6s
-const DB_TIMEOUT_MS   = 9000;    // 数据库阶段预算 9s
-const POST_TIMEOUT_MS = 2000;    // 去重/打分阶段预算 2s
+const TOTAL_BUDGET_MS = 35000;   // 整体最长 35 s
+const GPT_TIMEOUT_MS  = 8000;    // GPT 阶段预算 8 s
+const DB_TIMEOUT_MS   = 15000;   // 数据库查询预算 15 s
+const POST_TIMEOUT_MS = 10000;   // 后处理预算 10 s
 
 const now = () => Date.now();
 const budgetLeft = (t0: number) => Math.max(0, TOTAL_BUDGET_MS - (now() - t0));
