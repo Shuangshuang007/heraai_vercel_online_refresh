@@ -524,11 +524,15 @@ export async function POST(request: NextRequest) {
           if (requestMode === "fast") {
             const t0 = Date.now();
             const page = Math.max(1, Number(args?.page || 1));
-            const pageSize = Math.min(50, Math.max(1, Number(args?.page_size || 20)));
-            const postedWithinDays = args?.posted_within_days ? Number(args.posted_within_days) : undefined;
-            const platforms = args?.platforms || undefined;
+            const pageSize = Math.min(50, Math.max(1, Number(args?.page_size || args?.limit || 20)));
+            
+            // 只处理有效的参数，跳过 undefined
+            const postedWithinDays = args?.posted_within_days && Number(args.posted_within_days) > 0 
+              ? Number(args.posted_within_days) : undefined;
+            const platforms = Array.isArray(args?.platforms) && args.platforms.length > 0 
+              ? args.platforms : undefined;
 
-            console.info("[TRACE]", traceId, "FAST mode:", { page, pageSize, postedWithinDays, platforms });
+            console.info("[TRACE]", traceId, "FAST mode:", { page, pageSize, postedWithinDays, platforms, limit: args?.limit });
 
             let result;
             try {
@@ -584,7 +588,8 @@ export async function POST(request: NextRequest) {
             const note = elapsed >= 8000 ? "timeout" : "completed";
 
             // 使用安全日期转换，避免 toISOString() 错误
-            const limit = Math.min(Number(args?.limit || 10), 50);
+            const requestedLimit = Number(args?.limit || 10);
+            const limit = Math.min(Math.max(requestedLimit, 1), 50); // 确保在1-50范围内
             const src: any[] = Array.isArray(result?.jobs) ? result.jobs : (Array.isArray(result) ? result : []);
 
             let invalidDateCount = 0;
