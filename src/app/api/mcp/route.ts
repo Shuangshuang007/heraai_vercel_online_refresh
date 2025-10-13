@@ -344,80 +344,93 @@ export async function POST(request: NextRequest) {
     
     // Handle JSON-RPC tools/list request
     if (body?.method === "tools/list") {
-      console.log("[MCP] Received tools/list request:", body);
+      console.log("[MCP] tools/list requested");
       
-      // Return the same tools manifest as GET endpoint
+      // Simplified tools manifest for JSON-RPC
       const tools = [
         {
-          name: 'search_jobs',
-          description: '[MULTI-SOURCE JOB SEARCH] Aggregate jobs from LinkedIn, SEEK, Jora, and Adzuna with intelligent deduplication, AI-powered match scoring, and deal-breaker filtering.',
+          name: "search_jobs",
+          description: "Search and aggregate jobs from multiple platforms (LinkedIn, SEEK, Jora, Adzuna).",
           input_schema: {
-            type: 'object',
+            type: "object",
             properties: {
-              job_title: { type: 'string', description: 'Job title, role, or keywords' },
-              city: { type: 'string', description: 'City name' },
-              country_code: { type: 'string', default: 'AU' },
-              sources: { type: 'array', default: ['all'] },
-              enable_deduplication: { type: 'boolean', default: true },
-              limit: { type: 'integer', minimum: 1, maximum: 25, default: 10 }
+              job_title: { type: "string" },
+              city: { type: "string" },
+              country_code: { type: "string", default: "AU" },
+              sources: {
+                type: "array",
+                items: { type: "string", enum: ["all", "linkedin", "seek", "jora", "adzuna", "indeed"] },
+                default: ["all"],
+              },
+              enable_deduplication: { type: "boolean", default: true },
+              limit: { type: "integer", default: 5, minimum: 1, maximum: 20 },
             },
-            required: ['job_title', 'city'],
-            additionalProperties: false
-          }
+            required: ["job_title", "city"],
+          },
         },
         {
-          name: 'build_search_links',
-          description: '[DEEP LINKS GENERATOR] Generate direct search URLs for LinkedIn, SEEK, Jora, and Adzuna.',
+          name: "build_search_links",
+          description: "Generate direct search URLs for LinkedIn, SEEK, Jora, and Adzuna.",
           input_schema: {
-            type: 'object',
+            type: "object",
             properties: {
-              job_title: { type: 'string', description: 'Job title or keywords' },
-              city: { type: 'string', description: 'City name' },
-              country_code: { type: 'string', default: 'AU' },
-              platforms: { type: 'array', default: ['linkedin', 'seek', 'jora', 'adzuna'] }
+              job_title: { type: "string" },
+              city: { type: "string" },
+              country_code: { type: "string", default: "AU" },
+              platforms: {
+                type: "array",
+                items: { type: "string", enum: ["linkedin", "seek", "jora", "adzuna", "indeed"] },
+                default: ["linkedin", "seek", "jora", "adzuna"],
+              },
+              posted_within_days: { type: "integer", default: 7 },
             },
-            required: ['job_title', 'city'],
-            additionalProperties: false
-          }
+            required: ["job_title", "city"],
+          },
         },
         {
-          name: 'get_user_applications',
-          description: '[APPLICATION TRACKER] Retrieve user\'s complete job application history.',
+          name: "get_user_applications",
+          description: "Retrieve user's job application history (read-only, requires user email).",
           input_schema: {
-            type: 'object',
+            type: "object",
             properties: {
-              user_email: { type: 'string', format: 'email', description: 'User\'s email address' },
-              status_filter: { type: 'string', default: 'all' }
+              user_email: { type: "string", format: "email" },
+              status_filter: {
+                type: "string",
+                enum: ["all", "saved", "applied", "interviewing", "offered", "rejected"],
+                default: "all",
+              },
             },
-            required: ['user_email'],
-            additionalProperties: false
-          }
-        }
+            required: ["user_email"],
+          },
+        },
       ];
 
-      return NextResponse.json({
-        jsonrpc: "2.0",
-        id: body.id ?? null,
-        result: { tools }
-      });
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: body.id ?? null,
+          result: { tools },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
     }
     
     // Handle JSON-RPC tools/call request
     if (body?.method === "tools/call") {
-      console.log("[MCP] Received tools/call request:", body);
+      const { params } = body;
+      const toolName = params?.name;
+      const args = params?.arguments || {};
       
-      const toolName = body.params?.name;
-      const args = body.params?.arguments || {};
+      console.log("[MCP] tools/call:", toolName, args);
       
       if (!toolName) {
-        return NextResponse.json({
-          jsonrpc: "2.0",
-          id: body.id ?? null,
-          error: {
-            code: -32602,
-            message: "Invalid params: missing tool name"
-          }
-        });
+        return NextResponse.json(
+          { jsonrpc: "2.0", id: body.id ?? null, error: { message: "Missing tool name" } },
+          { status: 400 }
+        );
       }
       
       // Normalize parameter names (camelCase to snake_case)
@@ -428,53 +441,65 @@ export async function POST(request: NextRequest) {
         setTimeout(() => reject(new Error('Request timeout (8s)')), 8000);
       });
 
-      let result;
-      switch (toolName) {
-        case 'search_jobs':
-          result = await Promise.race([
-            handleSearchJobs(normalizedArgs),
-            timeoutPromise
-          ]);
-          break;
+      try {
+        let result;
+        switch (toolName) {
+          case 'search_jobs':
+            result = await Promise.race([
+              handleSearchJobs(normalizedArgs),
+              timeoutPromise
+            ]);
+            break;
 
-        case 'build_search_links':
-          result = await Promise.race([
-            handleBuildSearchLinks(normalizedArgs),
-            timeoutPromise
-          ]);
-          break;
+          case 'build_search_links':
+            result = await Promise.race([
+              handleBuildSearchLinks(normalizedArgs),
+              timeoutPromise
+            ]);
+            break;
 
-        case 'get_user_applications':
-          result = await Promise.race([
-            handleGetApplications(normalizedArgs),
-            timeoutPromise
-          ]);
-          break;
+          case 'get_user_applications':
+            result = await Promise.race([
+              handleGetApplications(normalizedArgs),
+              timeoutPromise
+            ]);
+            break;
 
-        default:
-          return NextResponse.json({
+          default:
+            return NextResponse.json(
+              { jsonrpc: "2.0", id: body.id ?? null, error: { message: `Unknown tool: ${toolName}` } },
+              { status: 400 }
+            );
+        }
+
+        return NextResponse.json({
+          jsonrpc: "2.0",
+          id: body.id ?? null,
+          result: { content: result }
+        });
+      } catch (e: any) {
+        console.error("[MCP] Tool error", e);
+        return NextResponse.json(
+          {
             jsonrpc: "2.0",
             id: body.id ?? null,
-            error: {
-              code: -32601,
-              message: `Tool '${toolName}' not found`
-            }
-          });
+            error: { message: e.message ?? "Internal error" },
+          },
+          { status: 500 }
+        );
       }
-
-      const duration = Date.now() - startTime;
-      console.log('[MCP] JSON-RPC tools/call response:', {
-        status: 200,
-        durationMs: duration,
-        tool: toolName
-      });
-
-      return NextResponse.json({
+    }
+    
+    // Handle unknown JSON-RPC methods
+    console.warn("[MCP] Unknown method:", body.method);
+    return NextResponse.json(
+      {
         jsonrpc: "2.0",
         id: body.id ?? null,
-        result: result
-      });
-    }
+        error: { message: `Unsupported method: ${body.method}` },
+      },
+      { status: 400 }
+    );
     
     // Legacy compatible field parsing (support both name/tool and arguments/args)
     const toolName = body.name ?? body.tool;
