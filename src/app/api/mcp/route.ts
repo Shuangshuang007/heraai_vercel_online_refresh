@@ -65,6 +65,56 @@ async function withTimeout<T>(p: Promise<T>, ms: number = 5000): Promise<T> {
   ]);
 }
 
+// 安全日期转换函数
+function toISODateSafe(x: any): string | null {
+  if (!x) return null;
+
+  // Mongo Date 对象
+  if (x instanceof Date) {
+    const t = x.getTime();
+    return Number.isFinite(t) ? new Date(t).toISOString() : null;
+  }
+
+  // 数字：可能是秒/毫秒时间戳
+  if (typeof x === "number") {
+    const ms = x < 1e12 ? x * 1000 : x; // 秒 → 毫秒
+    const d = new Date(ms);
+    return Number.isFinite(d.getTime()) ? d.toISOString() : null;
+  }
+
+  // 字符串：尽量解析常见格式
+  if (typeof x === "string") {
+    const s = x.trim();
+    if (!s) return null;
+
+    // 1) 原生解析（ISO、"2025-10-13T12:30:00Z" 等）
+    const d0 = new Date(s);
+    if (Number.isFinite(d0.getTime())) return d0.toISOString();
+
+    // 2) "YYYY-MM-DD HH:mm"（无时区）→ 当作 UTC
+    const m1 = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (m1) {
+      const [, Y, M, D, h, mi, sec = "0"] = m1;
+      const d = new Date(Date.UTC(+Y, +M - 1, +D, +h, +mi, +sec));
+      return Number.isFinite(d.getTime()) ? d.toISOString() : null;
+    }
+
+    // 3) "DD/MM/YYYY" 或 "DD-MM-YYYY"
+    const m2 = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
+    if (m2) {
+      let [, d, m, y] = m2;
+      if (y.length === 2) y = "20" + y;
+      const dt = new Date(+y, +m - 1, +d);
+      return Number.isFinite(dt.getTime()) ? dt.toISOString() : null;
+    }
+
+    // 其它无法解析（如 "Closing soon"）→ 返回 null
+    return null;
+  }
+
+  return null;
+}
+
 // ============================================
 // 2️⃣ FAST Mode: Lightweight Database Query
 // ============================================
@@ -533,29 +583,43 @@ export async function POST(request: NextRequest) {
             const elapsed = Date.now() - t0;
             const note = elapsed >= 8000 ? "timeout" : "completed";
 
-            // 最小修改：只返回5条完整数据，确保ChatGPT不报错
-            const rawJobs: any[] = Array.isArray(result?.jobs) ? result.jobs : (Array.isArray(result) ? result : []);
-            
-            // 过滤并映射，确保每条数据都完整
-            const safeJobs = rawJobs
-              .filter((j: any) => j && j.title && j.company && j.location) // 只保留有完整信息的记录
-              .slice(0, 5) // 确保最多5条
-              .map((j: any) => ({
-                title: j.title || "",
-                company: j.company || "",
-                location: j.location || "",
-                employmentType: j.employmentType || "",
-                postDate: j.postedDateISO || null,
-                url: j.url || `https://www.heraai.net.au/jobs/${encodeURIComponent(j._id || j.id || '')}`
-              }));
+            // 使用安全日期转换，避免 toISOString() 错误
+            const limit = Math.min(Number(args?.limit || 10), 50);
+            const src: any[] = Array.isArray(result?.jobs) ? result.jobs : (Array.isArray(result) ? result : []);
 
+            let invalidDateCount = 0;
+
+            const safeJobs = src.slice(0, limit).map((j: any) => {
+              const id = String(j?.id ?? j?._id ?? j?.jobIdentifier ?? "");
+              const rawDate = j?.postedDateISO ?? j?.postedAt ?? j?.createdAt ?? j?.updatedAt ?? null;
+              const postDate = toISODateSafe(rawDate);
+              if (!postDate && rawDate) invalidDateCount++;
+
+              const url =
+                (typeof j?.jobUrl === "string" && j.jobUrl) ? j.jobUrl :
+                (typeof j?.url === "string" && j.url) ? j.url :
+                `https://www.heraai.net.au/jobs/${encodeURIComponent(id)}?utm=chatgpt-mcp`;
+
+              return {
+                id,
+                title:   j?.title ?? "",
+                company: j?.company ?? j?.company_name ?? "",
+                location: j?.location ?? j?.locationRaw ?? "",
+                employmentType: j?.employmentType ?? "",
+                postDate,        // ← 安全 ISO 或 null，不会抛错
+                url,
+                platform: j?.source_label ?? j?.platform ?? j?.sourceType ?? ""
+              };
+            });
+
+            // 永远 200 返回（不要在顶层放 error）
             return new Response(JSON.stringify({
               jsonrpc: "2.0",
-              id: body?.id ?? null,
+              id: body.id ?? null,
               result: {
                 content: [{
                   type: "json",
-                  data: { content: { jobs: safeJobs, total: safeJobs.length } }
+                  data: { content: { jobs: safeJobs, total: safeJobs.length, invalidDates: invalidDateCount } }
                 }],
                 isError: false
               }
