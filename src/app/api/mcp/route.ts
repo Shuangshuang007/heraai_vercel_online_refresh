@@ -35,8 +35,15 @@ import {
 // ============================================
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
-const QUERY_TIMEOUT_MS = 10000; // 数据库最大允许 10 秒
+
+// --- Stage time budgets (milliseconds) ---
+const TOTAL_BUDGET_MS = 18000;   // 整体最长 18s
+const GPT_TIMEOUT_MS  = 6000;    // GPT 阶段预算 6s
+const DB_TIMEOUT_MS   = 9000;    // 数据库阶段预算 9s
+const POST_TIMEOUT_MS = 2000;    // 去重/打分阶段预算 2s
+
 const now = () => Date.now();
+const budgetLeft = (t0: number) => Math.max(0, TOTAL_BUDGET_MS - (now() - t0));
 
 function json200(data: any, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(data), {
@@ -45,20 +52,33 @@ function json200(data: any, headers: Record<string, string> = {}) {
   });
 }
 
-async function withTimeout<T>(promise: Promise<T>, ms: number = QUERY_TIMEOUT_MS): Promise<T> {
+async function withTimeout<T>(p: Promise<T>, ms: number = 5000): Promise<T> {
   return Promise.race([
-    promise,
+    p,
     new Promise<T>((_, reject) => 
       setTimeout(() => reject(new Error("timeout")), ms)
-    ),
+    ) as Promise<T>,
   ]);
 }
 
 // ============================================
-// 6️⃣ fetchFromDatabase（调用现有服务）
+// 6️⃣ 分阶段处理函数
 // ============================================
 
-async function fetchFromDatabase(jobTitle: string, city: string, limit: number): Promise<any[]> {
+// GPT 规划阶段（暂时跳过，直接返回 null）
+async function generateJobPlan(jobTitle: string, city: string): Promise<any> {
+  try {
+    // 暂时跳过 GPT 规划阶段，避免导入问题
+    console.log(`[MCP generateJobPlan] Skipping GPT planning for now: ${jobTitle} in ${city}`);
+    return null;
+  } catch (error) {
+    console.warn('[MCP generateJobPlan] Error:', error);
+    return null;
+  }
+}
+
+// 数据库查询阶段
+async function fetchFromDatabase(jobTitle: string, city: string, limit: number, plan?: any): Promise<any[]> {
   try {
     console.log(`[MCP fetchFromDatabase] Querying: ${jobTitle} in ${city}`);
     
@@ -71,36 +91,43 @@ async function fetchFromDatabase(jobTitle: string, city: string, limit: number):
       page: 1,
     });
 
-    let jobs: Job[] = result.jobs || [];
-    
-    if (jobs.length > 0) {
-      // 添加源标签
-      jobs = enhanceJobsWithSources(jobs);
-      
-      // 去重
-      jobs = deduplicateJobs(jobs);
-      
-      // 限制结果
-      jobs = jobs.slice(0, limit);
-      
-      // 简化对象（移除重字段）
-      jobs = jobs.map(job => ({
-        id: job.id,
-        title: job.title,
-        company: job.company,
-        location: job.location,
-        source: job.source,
-        source_label: job.source_label,
-        matchScore: job.matchScore,
-        url: job.url,
-      }));
-    }
-
-    console.log(`[MCP fetchFromDatabase] Found ${jobs.length} jobs`);
-    return jobs;
+    return result.jobs || [];
   } catch (error) {
     console.error('[MCP fetchFromDatabase] Error:', error);
     return [];
+  }
+}
+
+// 后处理阶段（去重、打分、简化）
+async function postProcessResults(jobs: any[]): Promise<any[]> {
+  try {
+    if (jobs.length === 0) {
+      return [];
+    }
+
+    // 添加源标签
+    let processedJobs = enhanceJobsWithSources(jobs);
+    
+    // 去重
+    processedJobs = deduplicateJobs(processedJobs);
+    
+    // 简化对象（移除重字段）
+    processedJobs = processedJobs.map((job: any) => ({
+      id: job.id,
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      source: job.source,
+      source_label: job.source_label,
+      matchScore: job.matchScore,
+      url: job.url,
+    }));
+
+    console.log(`[MCP postProcessResults] Processed ${processedJobs.length} jobs`);
+    return processedJobs;
+  } catch (error) {
+    console.error('[MCP postProcessResults] Error:', error);
+    return jobs; // 返回原始数据
   }
 }
 
@@ -241,7 +268,6 @@ export async function POST(request: NextRequest) {
 
       try {
         if (name === "search_jobs") {
-          const start = now();
           const jobTitle = String(args?.job_title || "").trim();
           const city = String(args?.city || "").trim();
           const limit = Number(args?.limit || 5);
@@ -254,30 +280,75 @@ export async function POST(request: NextRequest) {
             }, { "X-MCP-Trace-Id": traceId });
           }
 
-          // 🧠 调用数据库（带超时保护）
-          const jobs = await withTimeout(fetchFromDatabase(jobTitle, city, limit));
+          const t0 = Date.now();
+          console.info("[TRACE]", traceId, "Starting staged execution pipeline");
 
-          const res = {
-            jsonrpc: "2.0",
-            id: body.id ?? null,
-            result: {
-              content: [{ 
-                type: "json", 
-                data: { 
-                  content: { 
-                    jobs, 
-                    total: jobs.length,
-                    query: `${jobTitle} in ${city}`,
-                    timestamp: new Date().toISOString(),
-                  } 
-                } 
-              }],
-              isError: false,
+          // 🧭 1) GPT 规划阶段
+          let plan;
+          try {
+            plan = await withTimeout(
+              generateJobPlan(jobTitle, city),
+              Math.min(GPT_TIMEOUT_MS, budgetLeft(t0))
+            );
+            console.info("[TRACE]", traceId, "GPT plan OK");
+          } catch (e: any) {
+            console.warn("[TRACE]", traceId, "GPT planning timeout:", e.message);
+            plan = null;
+          }
+
+          // 🗄️ 2) 数据库查询阶段
+          let rows;
+          try {
+            rows = await withTimeout(
+              fetchFromDatabase(jobTitle, city, limit, plan),
+              Math.min(DB_TIMEOUT_MS, budgetLeft(t0))
+            );
+            console.info("[TRACE]", traceId, "DB query OK, rows:", rows?.length ?? 0);
+          } catch (e: any) {
+            console.warn("[TRACE]", traceId, "DB timeout:", e.message);
+            rows = [];
+          }
+
+          // 🧮 3) 后处理阶段（去重、匹配打分等）
+          let result;
+          try {
+            result = await withTimeout(
+              postProcessResults(rows),
+              Math.min(POST_TIMEOUT_MS, budgetLeft(t0))
+            );
+          } catch (e: any) {
+            console.warn("[TRACE]", traceId, "Post-process timeout:", e.message);
+            result = rows;
+          }
+
+          const elapsed = now() - t0;
+          const note = elapsed >= TOTAL_BUDGET_MS ? "budget_timeout" : "completed";
+
+          return json200(
+            {
+              jsonrpc: "2.0",
+              id: body.id ?? null,
+              result: {
+                content: [
+                  {
+                    type: "json",
+                    data: {
+                      content: {
+                        jobs: result,
+                        total: result?.length ?? 0,
+                        note,
+                        elapsedMs: elapsed,
+                        query: `${jobTitle} in ${city}`,
+                        timestamp: new Date().toISOString(),
+                      },
+                    },
+                  },
+                ],
+                isError: false,
+              },
             },
-          };
-
-          console.info("[TRACE]", traceId, { done: true, elapsed: now() - start });
-          return json200(res, { "X-MCP-Trace-Id": traceId });
+            { "X-MCP-Trace-Id": traceId }
+          );
 
         } else if (name === "build_search_links") {
           const jobTitle = String(args?.job_title || "").trim();
@@ -396,7 +467,7 @@ export async function POST(request: NextRequest) {
         }
 
       } catch (e: any) {
-        console.warn("[TRACE]", traceId, "DB or timeout error:", e.message);
+        console.warn("[TRACE]", traceId, "Pipeline error:", e.message);
 
         const fallback = {
           jsonrpc: "2.0",
@@ -409,7 +480,7 @@ export async function POST(request: NextRequest) {
                   content: {
                     jobs: [],
                     error: String(e.message),
-                    note: "Timeout or DB error, returned safely with HTTP 200",
+                    note: "pipeline_error",
                     timestamp: new Date().toISOString(),
                   },
                 },
