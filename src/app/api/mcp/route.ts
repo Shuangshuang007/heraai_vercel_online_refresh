@@ -710,20 +710,25 @@ async function handleSearchJobs(args: any) {
   });
 
   const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => reject(new Error('Database timeout (5s)')), 5000);
+    setTimeout(() => reject(new Error('Database timeout (15s)')), 15000);
   });
 
   let result: { jobs?: Job[] };
   let warnings: string[] = [];
   
+  console.log(`[MCP search_jobs] Starting database query with timeout protection`);
+  
   try {
     result = await Promise.race([fetchPromise, timeoutPromise]) as { jobs?: Job[] };
+    console.log(`[MCP search_jobs] Database query completed successfully, got ${result.jobs?.length || 0} jobs`);
   } catch (error) {
+    console.error(`[MCP search_jobs] Database query failed:`, error);
     if (error instanceof Error && error.message.includes('timeout')) {
-      warnings.push('Database query timed out after 5s, returning partial results');
+      warnings.push('Database query timed out after 10s, returning partial results');
       result = { jobs: [] }; // Return empty results with warning
     } else {
-      throw error;
+      warnings.push(`Database error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      result = { jobs: [] }; // Return empty results with warning instead of throwing
     }
   }
 
