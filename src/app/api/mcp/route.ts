@@ -355,8 +355,8 @@ export async function POST(request: NextRequest) {
           input_schema: {
             type: "object",
             properties: {
-              job_title: { type: "string" },
-              city: { type: "string" },
+              job_title: { type: "string", minLength: 1 },
+              city: { type: "string", minLength: 1 },
               country_code: { type: "string", default: "AU" },
               sources: {
                 type: "array",
@@ -375,8 +375,8 @@ export async function POST(request: NextRequest) {
           input_schema: {
             type: "object",
             properties: {
-              job_title: { type: "string" },
-              city: { type: "string" },
+              job_title: { type: "string", minLength: 1 },
+              city: { type: "string", minLength: 1 },
               country_code: { type: "string", default: "AU" },
               platforms: {
                 type: "array",
@@ -443,6 +443,28 @@ export async function POST(request: NextRequest) {
         );
       }
       
+      // Validate and clean parameters
+      const title = typeof args.job_title === "string" ? args.job_title.trim() : "";
+      const city = typeof args.city === "string" ? args.city.trim() : "";
+      
+      if (!title || !city) {
+        return NextResponse.json({
+          jsonrpc: "2.0",
+          id: body.id ?? null,
+          error: {
+            code: -32602, // JSON-RPC Invalid params
+            message: "Invalid parameters",
+            data: { 
+              required: ["job_title", "city"], 
+              got: { job_title: title, city: city } 
+            }
+          }
+        }, { 
+          status: 400, 
+          headers: { "Content-Type": "application/json" } 
+        });
+      }
+
       // Normalize parameter names (camelCase to snake_case)
       const normalizedArgs = normalizeArgs(args);
       
