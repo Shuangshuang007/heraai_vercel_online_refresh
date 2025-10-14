@@ -104,8 +104,102 @@ function hostOf(u?: string) {
   try { return new URL(u!).hostname; } catch { return ""; }
 }
 
-// 生成job highlights（使用OpenAI）
+// 导入工具函数
+function parseWorkMode(workMode: string, jobDescription: string): string {
+  if (workMode) {
+    return workMode.charAt(0).toUpperCase() + workMode.slice(1).toLowerCase();
+  }
+  const desc = jobDescription?.toLowerCase() || '';
+  // 百分比办公
+  const percentMatch = desc.match(/(\d+)%\s*(working in the office|onsite|in office)/i);
+  if (percentMatch) return `${percentMatch[1]}% Onsite`;
+  // 通用模式匹配
+  const patterns = [
+    { regex: /(\d+)\s*days?\s*(?:in\s*)?(?:the\s*)?(?:office|onsite)/i, format: (match: any) => `${match[1]}d Onsite` },
+    { regex: /at\s*least\s*(\d+)\s*days?\s*(?:in\s*)?(?:the\s*)?(?:office|onsite)/i, format: (match: any) => `+${match[1]}d Onsite` },
+    { regex: /hybrid/i, format: () => 'Hybrid' },
+    { regex: /remote|work\s*from\s*home/i, format: () => 'Fully Remote' },
+    { regex: /onsite|in\s*office/i, format: () => 'Onsite' }
+  ];
+  for (const pattern of patterns) {
+    const match = desc.match(pattern.regex);
+    if (match) {
+      return pattern.format(match);
+    }
+  }
+  return '';
+}
+
+function normalizeExperienceTag(text: string): string | null {
+  const match = text.match(/(\d{1,2})\s*(\+)?\s*(y|years)/i);
+  if (match) {
+    const years = parseInt(match[1], 10);
+    if (years > 40) return null;
+    if (years > 15) return '+15y';
+    return `${years}+ years`;
+  }
+  if (/experience/i.test(text)) {
+    return 'experienced professional';
+  }
+  return null;
+}
+
+// 生成job highlights（结合数据库字段和OpenAI）
 async function generateJobHighlights(job: any): Promise<string[]> {
+  const highlights: string[] = [];
+  
+  // ============================================
+  // 第1条：公司 + 明确年份 + Work Mode + 上班要求
+  // ============================================
+  const company = job.company || job.organisation || 'Company';
+  
+  // 提取经验年份（从数据库字段）
+  let experienceText = '';
+  if (job.experience) {
+    // 尝试提取具体年份
+    const yearMatch = job.experience.match(/(\d{1,2})\s*[\+\-–]?\s*(\d{1,2})?\s*(years?|yrs?|y)/i);
+    if (yearMatch) {
+      if (yearMatch[2]) {
+        experienceText = `${yearMatch[1]}-${yearMatch[2]} years`;
+      } else {
+        experienceText = `${yearMatch[1]}+ years`;
+      }
+    } else {
+      experienceText = job.experience;
+    }
+  } else {
+    // 从 tags 中提取经验
+    const experienceTag = (job.tags || []).find((tag: string) => 
+      /\d+\s*(y|years|yrs)|experience|senior|junior|mid/i.test(tag)
+    );
+    if (experienceTag) {
+      const normalized = normalizeExperienceTag(experienceTag);
+      if (normalized) {
+        experienceText = normalized;
+      }
+    }
+  }
+  if (!experienceText) {
+    experienceText = 'experienced professional';
+  }
+  
+  // 提取工作模式（从数据库字段）
+  const workMode = parseWorkMode(job.workMode || '', job.description || '');
+  
+  // 组合第1条
+  if (workMode) {
+    highlights.push(`${company} seeking ${experienceText}; ${workMode}`);
+  } else {
+    highlights.push(`${company} seeking ${experienceText}`);
+  }
+  
+  // ============================================
+  // 第2条：技能 + Degree + 身份要求
+  // ============================================
+  const requirementsParts: string[] = [];
+  
+  // 2.1 技能要求（使用OpenAI提取或fallback到数据库）
+  let skillsText = '';
   try {
     const { OpenAI } = await import('openai');
     const openai = new OpenAI({
@@ -113,127 +207,80 @@ async function generateJobHighlights(job: any): Promise<string[]> {
       baseURL: 'https://api.openai.com/v1',
     });
 
-    // 构建完整的job信息给GPT
-    const jobInfo = `
-Job Title: ${job.title || ''}
-Company: ${job.company || job.organisation || ''}
-Location: ${job.location || ''}
-Employment Type: ${job.employmentType || ''}
-Experience Level: ${job.experience || 'Not specified'}
+    const prompt = `Extract ONLY the top 3-4 technical skills/tools from this job posting.
 
-Job Description:
-${(job.description || job.summary || '').substring(0, 1500)}
+Job: ${job.title || ''}
+Description: ${(job.description || job.summary || '').substring(0, 800)}
+${job.skills && job.skills.length > 0 ? `\nSkills: ${job.skills.slice(0, 8).join(', ')}` : ''}
 
-${job.requirements && job.requirements.length > 0 ? `
-Requirements from Database:
-${job.requirements.join('\n')}
-` : ''}
-
-${job.skills && job.skills.length > 0 ? `
-Skills from Database:
-${job.skills.join(', ')}
-` : ''}
-
-${job.jobUrl || job.url ? `
-Job URL: ${job.jobUrl || job.url}
-` : ''}
-`.trim();
-
-    const prompt = `Analyze the following job posting and extract 2-3 key highlights:
-
-${jobInfo}
-
-CRITICAL REQUIREMENTS:
-1. First Highlight - Experience & Company:
-   - Format: "[Company type/industry] seeking [specific years] experience"
-   - MUST include EXACT years of experience (e.g., "5+ years", "3-5 years", "2+ years")
-   - Extract from "Experience Level" field OR job description
-   - If experience not specified, write "seeking experienced professional"
-   - Example: "Global tech company seeking 8+ years experience"
-   - Example: "Leading bank seeking 3-5 years experience"
-   - DO NOT use vague terms like "senior" or "mid-level" without years
-
-2. Second Highlight - Hard Requirements (MOST IMPORTANT):
-   - Format: "Requires: [skill1, skill2, skill3, skill4]"
-   - ONLY include technical skills, tools, certifications, or licenses
-   - Extract from "Requirements from Database" and "Skills from Database" sections
-   - Prioritize hard/technical requirements over soft skills
-   - List 3-5 most important requirements
-   - Example: "Requires: Python, AWS, Docker, Kubernetes, CI/CD"
-   - Example: "Requires: CPA, SAP, Excel, SQL"
-   - DO NOT include: location, years of experience, soft skills (teamwork, communication, etc.)
-
-3. Third Highlight - Special Requirements or Benefits (OPTIONAL):
-   - ONLY include if explicitly mentioned in job description
-   - Focus on: visa/citizenship requirements, sponsorship, remote work, unique benefits
-   - Example: "Australian PR or citizenship required"
-   - Example: "Visa sponsorship available for qualified candidates"
-   - Example: "Fully remote with flexible hours"
-   - If nothing specific, DO NOT output this highlight
-
-FORMATTING:
-- Each highlight must be ONE sentence, max 15 words
-- Start each highlight with "•"
-- Be specific and factual, no marketing language
-- Extract from the provided data, do not make assumptions
-
-Output format:
-• [highlight 1]
-• [highlight 2]
-• [highlight 3]  (only if applicable)`;
+Return ONLY a comma-separated list of 3-4 technical skills (no "Requires:", no explanations).
+Example: Python, AWS, Docker, Kubernetes`;
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo-1106',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 180,
+      max_tokens: 60,
       temperature: 0.2,
     });
 
-    const response = completion.choices[0]?.message?.content || '';
-    
-    // 解析highlights
-    const highlights = response
-      .split('\n')
-      .filter(line => line.trim().startsWith('•'))
-      .map(line => line.trim().substring(1).trim())
-      .filter(h => h.length > 0);
-    
-    // Fallback逻辑：使用数据库字段
-    if (highlights.length === 0) {
-      const fallbackHighlights: string[] = [];
-      
-      // Fallback 1: 公司 + 经验
-      const experienceText = job.experience || 'experienced professional';
-      fallbackHighlights.push(
-        `${job.company || 'Company'} seeking ${experienceText}`
-      );
-      
-      // Fallback 2: 技能要求
-      if (job.skills && job.skills.length > 0) {
-        const topSkills = job.skills.slice(0, 5).join(', ');
-        fallbackHighlights.push(`Requires: ${topSkills}`);
-      } else if (job.requirements && job.requirements.length > 0) {
-        const topReqs = job.requirements.slice(0, 3).join(', ');
-        fallbackHighlights.push(`Requirements: ${topReqs}`);
-      } else {
-        fallbackHighlights.push('View details for full requirements');
-      }
-      
-      return fallbackHighlights;
+    const response = completion.choices[0]?.message?.content?.trim() || '';
+    if (response && !response.toLowerCase().includes('requires')) {
+      skillsText = response;
     }
-    
-    return highlights;
   } catch (error) {
-    console.error('[MCP] Highlights generation error:', error);
-    
-    // 错误时的fallback
-    return [
-      `${job.company || 'Company'} seeking ${job.experience || 'candidate'}`,
-      job.skills && job.skills.length > 0 
-        ? `Requires: ${job.skills.slice(0, 5).join(', ')}`
-        : 'View details for requirements'
-    ];
+    console.error('[MCP] OpenAI error:', error);
   }
+  
+  // Fallback: 使用数据库skills
+  if (!skillsText && job.skills && job.skills.length > 0) {
+    skillsText = job.skills.slice(0, 4).join(', ');
+  }
+  
+  if (skillsText) {
+    requirementsParts.push(skillsText);
+  }
+  
+  // 2.2 学位要求（从tags或description提取）
+  let degreeText = '';
+  const degreeTag = (job.tags || []).find((tag: string) => 
+    /bachelor|master|phd|doctorate|degree/i.test(tag)
+  );
+  if (degreeTag) {
+    degreeText = degreeTag;
+  } else {
+    const jdLower = (job.description || job.summary || '').toLowerCase();
+    if (/bachelor'?s?\s+degree/i.test(jdLower)) {
+      degreeText = "Bachelor's";
+    } else if (/master'?s?\s+degree/i.test(jdLower)) {
+      degreeText = "Master's";
+    } else if (/phd|doctorate/i.test(jdLower)) {
+      degreeText = "PhD";
+    }
+  }
+  if (degreeText) {
+    requirementsParts.push(degreeText);
+  }
+  
+  // 2.3 身份要求（从description提取）
+  const jdText = (job.description || job.summary || '').toLowerCase();
+  let citizenshipText = '';
+  if (/australian citizenship|citizenship required|pr required|permanent resident/i.test(jdText)) {
+    citizenshipText = 'Australian PR/Citizenship required';
+  } else if (/visa sponsorship|sponsorship available|will sponsor/i.test(jdText)) {
+    citizenshipText = 'Visa sponsorship available';
+  }
+  if (citizenshipText) {
+    requirementsParts.push(citizenshipText);
+  }
+  
+  // 组合第2条
+  if (requirementsParts.length > 0) {
+    highlights.push(`Requires: ${requirementsParts.join('; ')}`);
+  } else {
+    highlights.push('View details for full requirements');
+  }
+  
+  return highlights;
 }
 
 // 带Highlights和View Details链接的卡片（ChatGPT支持Markdown链接）
