@@ -689,15 +689,15 @@ export async function POST(request: NextRequest) {
         {
           name: "search_jobs",
           description: HERA_MCP_MODE === "fast" 
-            ? "FAST: Search jobs by title+city+company. IMPORTANT: When user says 'jobs at Microsoft' or 'Microsoft positions', separate into job_title='software engineer' and company='Microsoft'."
-            : "FULL: Deep search with GPT analysis and scoring. IMPORTANT: When user says 'jobs at Microsoft' or 'Microsoft positions', separate into job_title='software engineer' and company='Microsoft'.",
+            ? "FAST: Lightweight search by title+city, newest first, paginated."
+            : "FULL: Deep search with GPT analysis and scoring.",
           inputSchema: {
             type: "object",
             properties: {
               job_title: { 
                 type: "string", 
                 minLength: 1, 
-                description: "Job title only (e.g., 'software engineer'). Do NOT include company names here." 
+                description: "e.g., 'software engineer'" 
               },
               city: { 
                 type: "string", 
@@ -729,7 +729,7 @@ export async function POST(request: NextRequest) {
               },
               company: {
                 type: "string",
-                description: "Company name ONLY (e.g., 'Microsoft', 'Google', 'ABC'). Use when user mentions specific companies. Extract company names from phrases like 'jobs at Microsoft' or 'Microsoft positions'."
+                description: "Filter by company name (optional). IMPORTANT: Use this when user mentions specific companies like 'Microsoft', 'Google', 'Meta', 'ABC', 'Telstra', etc."
               },
               mode: {
                 type: "string",
