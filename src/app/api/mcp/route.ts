@@ -689,8 +689,8 @@ export async function POST(request: NextRequest) {
         {
           name: "search_jobs",
           description: HERA_MCP_MODE === "fast" 
-            ? "FAST: Lightweight search by title+city, newest first, paginated."
-            : "FULL: Deep search with GPT analysis and scoring.",
+            ? "FAST: Search jobs by title+city. Use 'company' parameter when user asks for jobs at specific companies like 'Microsoft', 'Google', 'ABC', etc."
+            : "FULL: Deep search with GPT analysis and scoring. Use 'company' parameter when user asks for jobs at specific companies.",
           inputSchema: {
             type: "object",
             properties: {
@@ -729,7 +729,7 @@ export async function POST(request: NextRequest) {
               },
               company: {
                 type: "string",
-                description: "Filter by company name (optional)"
+                description: "Filter by company name (optional). Use when user asks for jobs at specific companies like 'Microsoft', 'Google', 'ABC', 'Telstra', etc."
               },
               mode: {
                 type: "string",
@@ -759,8 +759,8 @@ export async function POST(request: NextRequest) {
           },
         },
         {
-          name: "search_jobs_by_company",
-          description: "Search jobs filtered by specific company name.",
+          name: "search_jobs_by_company", 
+          description: "Search jobs at specific companies. Use this when user asks for jobs at companies like 'Microsoft', 'Google', 'ABC', 'Telstra', etc.",
           inputSchema: {
             type: "object",
             properties: {
