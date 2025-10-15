@@ -385,7 +385,6 @@ interface FastQueryParams {
   pageSize?: number;
   postedWithinDays?: number;
   platforms?: string[];
-  company?: string;
 }
 
 async function fastDbQuery(params: FastQueryParams): Promise<{
@@ -402,7 +401,6 @@ async function fastDbQuery(params: FastQueryParams): Promise<{
     pageSize = 20,
     postedWithinDays,
     platforms,
-    company,
   } = params;
 
   try {
@@ -435,17 +433,6 @@ async function fastDbQuery(params: FastQueryParams): Promise<{
           { source: { $in: platformRegex } },
           { sourceType: { $in: platformRegex } },
           { platform: { $in: platformRegex } },
-        ]
-      });
-    }
-
-    // Optional: Filter by company
-    if (company) {
-      filter.$and = filter.$and || [];
-      filter.$and.push({
-        $or: [
-          { company: { $regex: company, $options: 'i' } },
-          { organisation: { $regex: company, $options: 'i' } },
         ]
       });
     }
@@ -606,26 +593,6 @@ export async function GET(request: NextRequest) {
         description: `Search jobs (mode: ${HERA_MCP_MODE})`,
       },
       {
-        name: 'search_jobs_by_company',
-        description: 'Search jobs filtered by specific company name',
-      },
-      {
-        name: 'search_jobs_with_filters',
-        description: 'Search jobs with advanced filters (employment type, experience level, etc.)',
-      },
-      {
-        name: 'fetch_job_description',
-        description: 'Fetch detailed job description by job ID',
-      },
-      {
-        name: 'fetch_job_requirements',
-        description: 'Fetch job requirements and skills by job ID',
-      },
-      {
-        name: 'list_recent_jobs',
-        description: 'List most recently posted jobs',
-      },
-      {
         name: 'build_search_links', 
         description: 'Generate direct search URLs for job platforms',
       },
@@ -727,10 +694,6 @@ export async function POST(request: NextRequest) {
                 items: { type: "string" },
                 description: "Filter by platforms: seek, linkedin, jora, adzuna, etc. (optional)"
               },
-              company: {
-                type: "string",
-                description: "Filter by company name (optional). IMPORTANT: Use this when user mentions specific companies like 'Microsoft', 'Google', 'Meta', 'ABC', 'Telstra', etc."
-              },
               mode: {
                 type: "string",
                 enum: ["fast", "full"],
@@ -756,46 +719,6 @@ export async function POST(request: NextRequest) {
               },
             },
             required: ["job_title", "city"],
-          },
-        },
-        {
-          name: "search_jobs_by_company", 
-          description: "Search jobs at specific companies. Use this when user asks for jobs at companies like 'Microsoft', 'Google', 'ABC', 'Telstra', etc.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              job_title: { type: "string", minLength: 1 },
-              city: { type: "string", minLength: 1 },
-              company: { type: "string", minLength: 1 },
-            },
-            required: ["job_title", "city", "company"],
-          },
-        },
-        {
-          name: "fetch_job_description",
-          description: "Fetch detailed job description by job ID.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              job_id: { type: "string", minLength: 1 },
-            },
-            required: ["job_id"],
-          },
-        },
-        {
-          name: "list_recent_jobs",
-          description: "List most recently posted jobs.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              limit: { 
-                type: "integer", 
-                minimum: 1, 
-                maximum: 20, 
-                default: 10 
-              },
-            },
-            required: [],
           },
         },
         {
@@ -875,15 +798,12 @@ export async function POST(request: NextRequest) {
               ? Number(args.posted_within_days) : undefined;
             const platforms = Array.isArray(args?.platforms) && args.platforms.length > 0 
               ? args.platforms : undefined;
-            const company = args?.company && String(args.company).trim() 
-              ? String(args.company).trim() : undefined;
 
             // 只打印有效的参数，跳过 undefined
             const logParams: any = { page, pageSize };
             if (args?.limit) logParams.limit = args.limit;
             if (postedWithinDays) logParams.postedWithinDays = postedWithinDays;
             if (platforms) logParams.platforms = platforms;
-            if (company) logParams.company = company;
             console.info("[TRACE]", traceId, "FAST mode:", logParams);
 
             let result;
@@ -895,8 +815,7 @@ export async function POST(request: NextRequest) {
                   page, 
                   pageSize,
                   postedWithinDays,
-                  platforms,
-                  company
+                  platforms
                 }),
                 Math.min(8000, budgetLeft(t0))
               );
@@ -981,30 +900,13 @@ export async function POST(request: NextRequest) {
               result?.total || safeJobs.length
             );
 
-            // 返回text和json两种格式（iOS ChatGPT需要text，其他客户端需要json）
+            // 测试：只返回text，不返回json（看是否是json导致问题）
             return new Response(JSON.stringify({
               jsonrpc: "2.0",
               id: body.id ?? null,
               result: {
                 content: [
-                  { type: "text", text: markdownPreview },
-                  { 
-                    type: "json", 
-                    data: { 
-                      content: {
-                        mode: "fast",
-                        total: result?.total || safeJobs.length,
-                        jobs: safeJobs,
-                        page,
-                        page_size: limit,
-                        has_more: result?.hasMore || false,
-                        query: `${jobTitle} in ${city}`,
-                        note,
-                        elapsed_ms: elapsed,
-                        timestamp: new Date().toISOString()
-                      }
-                    } 
-                  }
+                  { type: "text", text: markdownPreview }
                 ],
                 isError: false
               }
@@ -1152,204 +1054,6 @@ export async function POST(request: NextRequest) {
               isError: false
             }
           }, { "X-MCP-Trace-Id": traceId });
-        }
-
-        // ============================================
-        // Tool: search_jobs_by_company (alias for search_jobs with company filter)
-        // ============================================
-        else if (name === "search_jobs_by_company") {
-          const jobTitle = String(args?.job_title || "").trim();
-          const city = String(args?.city || "").trim();
-          const company = String(args?.company || "").trim();
-          
-          if (!jobTitle || !city || !company) {
-            return json200({
-              jsonrpc: "2.0",
-              id: body.id ?? null,
-              result: {
-                content: [{
-                  type: "json",
-                  data: {
-                    content: {
-                      jobs: [],
-                      error: "job_title, city, and company are required",
-                      note: "missing_params"
-                    }
-                  }
-                }],
-                isError: false
-              }
-            }, { "X-MCP-Trace-Id": traceId });
-          }
-
-          // Reuse existing search_jobs logic with company filter
-          const result = await withTimeout(
-            fastDbQuery({ 
-              title: jobTitle, 
-              city, 
-              page: 1, 
-              pageSize: 5,
-              company
-            }),
-            8000
-          );
-
-          const safeJobs = result.jobs.map((j: any) => mapJobSafe(j));
-          
-          return json200({
-            jsonrpc: "2.0",
-            id: body.id ?? null,
-            result: {
-              content: [{
-                type: "json",
-                data: {
-                  content: {
-                    mode: "fast",
-                    total: result.total,
-                    jobs: safeJobs,
-                    query: `${jobTitle} at ${company} in ${city}`
-                  }
-                }
-              }],
-              isError: false
-            }
-          }, { "X-MCP-Trace-Id": traceId });
-        }
-
-        // ============================================
-        // Tool: fetch_job_description
-        // ============================================
-        else if (name === "fetch_job_description") {
-          const jobId = String(args?.job_id || "").trim();
-          
-          if (!jobId) {
-            return json200({
-              jsonrpc: "2.0",
-              id: body.id ?? null,
-              result: {
-                content: [{
-                  type: "json",
-                  data: {
-                    content: {
-                      description: null,
-                      error: "job_id is required",
-                      note: "missing_params"
-                    }
-                  }
-                }],
-                isError: false
-              }
-            }, { "X-MCP-Trace-Id": traceId });
-          }
-
-          try {
-            const { db } = await connectToMongoDB();
-            const collection = db.collection('hera_jobs.jobs');
-            
-            const job = await collection.findOne(
-              { _id: jobId },
-              { projection: { description: 1, summary: 1, title: 1, company: 1 } }
-            );
-
-            return json200({
-              jsonrpc: "2.0",
-              id: body.id ?? null,
-              result: {
-                content: [{
-                  type: "json",
-                  data: {
-                    content: {
-                      job_id: jobId,
-                      description: job?.description || job?.summary || null,
-                      title: job?.title || null,
-                      company: job?.company || null
-                    }
-                  }
-                }],
-                isError: false
-              }
-            }, { "X-MCP-Trace-Id": traceId });
-          } catch (error) {
-            return json200({
-              jsonrpc: "2.0",
-              id: body.id ?? null,
-              result: {
-                content: [{
-                  type: "json",
-                  data: {
-                    content: {
-                      description: null,
-                      error: "Failed to fetch job description",
-                      note: "fetch_error"
-                    }
-                  }
-                }],
-                isError: false
-              }
-            }, { "X-MCP-Trace-Id": traceId });
-          }
-        }
-
-        // ============================================
-        // Tool: list_recent_jobs
-        // ============================================
-        else if (name === "list_recent_jobs") {
-          const limit = Math.min(Number(args?.limit || 10), 20);
-          
-          try {
-            const { db } = await connectToMongoDB();
-            const collection = db.collection('hera_jobs.jobs');
-            
-            const jobs = await collection
-              .find({ is_active: { $ne: false } })
-              .sort({ postedDateISO: -1, createdAt: -1 })
-              .limit(limit)
-              .project({
-                id: 1, _id: 1, jobIdentifier: 1, title: 1, company: 1, organisation: 1,
-                location: 1, employmentType: 1, jobUrl: 1, url: 1, postedDateISO: 1,
-                createdAt: 1, source: 1, sourceType: 1, platform: 1
-              })
-              .toArray();
-
-            const safeJobs = jobs.map((j: any) => mapJobSafe(j));
-            
-            return json200({
-              jsonrpc: "2.0",
-              id: body.id ?? null,
-              result: {
-                content: [{
-                  type: "json",
-                  data: {
-                    content: {
-                      mode: "fast",
-                      total: safeJobs.length,
-                      jobs: safeJobs,
-                      query: "Most recent jobs"
-                    }
-                  }
-                }],
-                isError: false
-              }
-            }, { "X-MCP-Trace-Id": traceId });
-          } catch (error) {
-            return json200({
-              jsonrpc: "2.0",
-              id: body.id ?? null,
-              result: {
-                content: [{
-                  type: "json",
-                  data: {
-                    content: {
-                      jobs: [],
-                      error: "Failed to fetch recent jobs",
-                      note: "fetch_error"
-                    }
-                  }
-                }],
-                isError: false
-              }
-            }, { "X-MCP-Trace-Id": traceId });
-          }
         }
 
         // ============================================
