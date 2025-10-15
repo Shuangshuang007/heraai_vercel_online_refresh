@@ -900,13 +900,30 @@ export async function POST(request: NextRequest) {
               result?.total || safeJobs.length
             );
 
-            // 测试：只返回text，不返回json（看是否是json导致问题）
+            // 返回text和json两种格式（iOS ChatGPT需要text，其他客户端需要json）
             return new Response(JSON.stringify({
               jsonrpc: "2.0",
               id: body.id ?? null,
               result: {
                 content: [
-                  { type: "text", text: markdownPreview }
+                  { type: "text", text: markdownPreview },
+                  { 
+                    type: "json", 
+                    data: { 
+                      content: {
+                        mode: "fast",
+                        total: result?.total || safeJobs.length,
+                        jobs: safeJobs,
+                        page,
+                        page_size: limit,
+                        has_more: result?.hasMore || false,
+                        query: `${jobTitle} in ${city}`,
+                        note,
+                        elapsed_ms: elapsed,
+                        timestamp: new Date().toISOString()
+                      }
+                    } 
+                  }
                 ],
                 isError: false
               }
