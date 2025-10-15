@@ -385,6 +385,7 @@ interface FastQueryParams {
   pageSize?: number;
   postedWithinDays?: number;
   platforms?: string[];
+  company?: string;
 }
 
 async function fastDbQuery(params: FastQueryParams): Promise<{
@@ -401,6 +402,7 @@ async function fastDbQuery(params: FastQueryParams): Promise<{
     pageSize = 20,
     postedWithinDays,
     platforms,
+    company,
   } = params;
 
   try {
@@ -433,6 +435,17 @@ async function fastDbQuery(params: FastQueryParams): Promise<{
           { source: { $in: platformRegex } },
           { sourceType: { $in: platformRegex } },
           { platform: { $in: platformRegex } },
+        ]
+      });
+    }
+
+    // Optional: Filter by company
+    if (company) {
+      filter.$and = filter.$and || [];
+      filter.$and.push({
+        $or: [
+          { company: { $regex: company, $options: 'i' } },
+          { organisation: { $regex: company, $options: 'i' } },
         ]
       });
     }
@@ -694,6 +707,10 @@ export async function POST(request: NextRequest) {
                 items: { type: "string" },
                 description: "Filter by platforms: seek, linkedin, jora, adzuna, etc. (optional)"
               },
+              company: {
+                type: "string",
+                description: "Filter by company name (optional)"
+              },
               mode: {
                 type: "string",
                 enum: ["fast", "full"],
@@ -798,12 +815,15 @@ export async function POST(request: NextRequest) {
               ? Number(args.posted_within_days) : undefined;
             const platforms = Array.isArray(args?.platforms) && args.platforms.length > 0 
               ? args.platforms : undefined;
+            const company = args?.company && String(args.company).trim() 
+              ? String(args.company).trim() : undefined;
 
             // 只打印有效的参数，跳过 undefined
             const logParams: any = { page, pageSize };
             if (args?.limit) logParams.limit = args.limit;
             if (postedWithinDays) logParams.postedWithinDays = postedWithinDays;
             if (platforms) logParams.platforms = platforms;
+            if (company) logParams.company = company;
             console.info("[TRACE]", traceId, "FAST mode:", logParams);
 
             let result;
@@ -815,7 +835,8 @@ export async function POST(request: NextRequest) {
                   page, 
                   pageSize,
                   postedWithinDays,
-                  platforms
+                  platforms,
+                  company
                 }),
                 Math.min(8000, budgetLeft(t0))
               );
