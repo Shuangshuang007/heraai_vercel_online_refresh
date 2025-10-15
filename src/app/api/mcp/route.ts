@@ -759,6 +759,46 @@ export async function POST(request: NextRequest) {
           },
         },
         {
+          name: "search_jobs_by_company",
+          description: "Search jobs filtered by specific company name.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              job_title: { type: "string", minLength: 1 },
+              city: { type: "string", minLength: 1 },
+              company: { type: "string", minLength: 1 },
+            },
+            required: ["job_title", "city", "company"],
+          },
+        },
+        {
+          name: "fetch_job_description",
+          description: "Fetch detailed job description by job ID.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              job_id: { type: "string", minLength: 1 },
+            },
+            required: ["job_id"],
+          },
+        },
+        {
+          name: "list_recent_jobs",
+          description: "List most recently posted jobs.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              limit: { 
+                type: "integer", 
+                minimum: 1, 
+                maximum: 20, 
+                default: 10 
+              },
+            },
+            required: [],
+          },
+        },
+        {
           name: "get_user_applications",
           description: "Retrieve user job application history.",
           inputSchema: {
