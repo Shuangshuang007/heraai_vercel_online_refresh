@@ -379,12 +379,13 @@ function safeMcpErr(id: number | string | null, msg = "Hera Jobs temporary error
 // ============================================
 
 interface FastQueryParams {
-  title: string;
-  city: string;
+  title?: string; // Make optional
+  city?: string; // Make optional
   page?: number;
   pageSize?: number;
   postedWithinDays?: number;
   platforms?: string[];
+  company?: string; // New: company filter
 }
 
 async function fastDbQuery(params: FastQueryParams): Promise<{
@@ -401,6 +402,7 @@ async function fastDbQuery(params: FastQueryParams): Promise<{
     pageSize = 20,
     postedWithinDays,
     platforms,
+    company,
   } = params;
 
   try {
@@ -409,10 +411,29 @@ async function fastDbQuery(params: FastQueryParams): Promise<{
 
     // Build query filter
     const filter: any = {
-      title: { $regex: title, $options: 'i' },
-      location: { $regex: city, $options: 'i' },
       is_active: { $ne: false }
     };
+
+    // Optional: Filter by title (only if provided)
+    if (title) {
+      filter.title = { $regex: title, $options: 'i' };
+    }
+
+    // Optional: Filter by city (only if provided)
+    if (city) {
+      filter.location = { $regex: city, $options: 'i' };
+    }
+
+    // Optional: Filter by company
+    if (company) {
+      filter.$and = filter.$and || [];
+      filter.$and.push({
+        $or: [
+          { company: { $regex: company, $options: 'i' } },
+          { company_name: { $regex: company, $options: 'i' } }
+        ]
+      });
+    }
 
     // Optional: Filter by posted date
     if (postedWithinDays && postedWithinDays > 0) {
@@ -593,6 +614,10 @@ export async function GET(request: NextRequest) {
         description: `Search jobs (mode: ${HERA_MCP_MODE})`,
       },
       {
+        name: 'search_jobs_by_company',
+        description: 'Search jobs by specific company name',
+      },
+      {
         name: 'build_search_links', 
         description: 'Generate direct search URLs for job platforms',
       },
@@ -701,6 +726,53 @@ export async function POST(request: NextRequest) {
               }
             },
             required: ["job_title", "city"],
+            additionalProperties: false
+          },
+        },
+        {
+          name: "search_jobs_by_company",
+          description: "Search jobs by specific company name with optional title and city filters.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              company_name: { 
+                type: "string", 
+                minLength: 1, 
+                description: "Company name to search for, e.g., 'Google', 'Microsoft'" 
+              },
+              job_title: { 
+                type: "string", 
+                description: "Optional job title filter, e.g., 'software engineer'" 
+              },
+              city: { 
+                type: "string", 
+                description: "Optional city filter, e.g., 'Melbourne'" 
+              },
+              page: { 
+                type: "integer", 
+                default: 1, 
+                minimum: 1, 
+                description: "Page number for pagination" 
+              },
+              page_size: { 
+                type: "integer", 
+                default: 20, 
+                minimum: 1, 
+                maximum: 50, 
+                description: "Results per page (max 50)" 
+              },
+              posted_within_days: { 
+                type: "integer", 
+                minimum: 1, 
+                description: "Filter jobs posted within X days (optional)" 
+              },
+              platforms: { 
+                type: "array", 
+                items: { type: "string" }, 
+                description: "Filter by platforms: seek, linkedin, jora, adzuna, etc. (optional)" 
+              }
+            },
+            required: ["company_name"],
             additionalProperties: false
           },
         },
@@ -996,6 +1068,135 @@ export async function POST(request: NextRequest) {
                 "X-MCP-Elapsed": String(elapsed)
               }
             );
+          }
+        }
+
+        // ============================================
+        // Tool: search_jobs_by_company
+        // ============================================
+        else if (name === "search_jobs_by_company") {
+          const companyName = String(args?.company_name || "").trim();
+          const jobTitle = String(args?.job_title || "").trim();
+          const city = String(args?.city || "").trim();
+
+          // Validate required params
+          if (!companyName) {
+            return json200({
+              jsonrpc: "2.0",
+              id: body.id ?? null,
+              result: {
+                content: [{
+                  type: "json",
+                  data: {
+                    content: {
+                      jobs: [],
+                      total: 0,
+                      note: "missing_params",
+                      message: "company_name is required"
+                    }
+                  }
+                }],
+                isError: false
+              }
+            }, { "X-MCP-Trace-Id": traceId });
+          }
+
+          // Use FAST mode for company search (lightweight)
+          const t0 = Date.now();
+          const page = Math.max(1, Number(args?.page || 1));
+          const pageSize = 20; // Default page size
+          const postedWithinDays = Number(args?.posted_within_days || 0);
+          const platforms = Array.isArray(args?.platforms) ? args.platforms : undefined;
+
+          console.info("[TRACE]", traceId, "Company search:", { companyName, jobTitle, city });
+
+          // Build query parameters
+          const queryParams: FastQueryParams = {
+            title: jobTitle || undefined, // Only use job title if provided
+            city: city || undefined, // Only use city if provided
+            page,
+            pageSize,
+            postedWithinDays: postedWithinDays > 0 ? postedWithinDays : undefined,
+            platforms,
+            company: companyName, // Company filter is the main search criteria
+          };
+
+          try {
+            const result = await fastDbQuery(queryParams);
+            
+            // Generate highlights for jobs (reuse existing logic)
+            const jobsWithHighlights = await Promise.all(
+              result.jobs.slice(0, pageSize).map(async (job: any) => {
+                try {
+                  const highlights = await withTimeout(
+                    generateJobHighlights(job),
+                    3000 // Each job gets 3 seconds for highlights
+                  );
+                  return { ...job, highlights };
+                } catch (error) {
+                  console.error('[MCP] Highlights timeout for job:', job.id || job._id);
+                  // Fallback logic
+                  const fallbackHighlights = [
+                    `${job.company || job.company_name || 'Company'} seeking ${job.experience || 'candidate'}`,
+                    job.skills && job.skills.length > 0 
+                      ? `Requires: ${job.skills.slice(0, 5).join(', ')}`
+                      : 'View details for requirements'
+                  ];
+                  return { ...job, highlights: fallbackHighlights };
+                }
+              })
+            );
+            
+            // Map to safe format (preserve highlights)
+            const safeJobs = jobsWithHighlights.map((j: any) => ({
+              ...mapJobSafe(j),
+              highlights: j.highlights || []
+            }));
+            
+            // Generate Markdown cards preview with company info
+            const markdownPreview = buildMarkdownCards(
+              { title: jobTitle || `jobs from ${companyName}`, city }, 
+              safeJobs, 
+              result?.total || safeJobs.length
+            );
+
+            return new Response(JSON.stringify({
+              jsonrpc: "2.0",
+              id: body.id ?? null,
+              result: {
+                content: [
+                  { type: "text", text: markdownPreview }
+                ],
+                isError: false
+              }
+            }), {
+              status: 200,
+              headers: {
+                "content-type": "application/json; charset=utf-8",
+                "cache-control": "no-store"
+              }
+            });
+
+          } catch (error: any) {
+            console.error('[MCP] Company search error:', error);
+            return json200({
+              jsonrpc: "2.0",
+              id: body.id ?? null,
+              result: {
+                content: [{
+                  type: "json",
+                  data: {
+                    content: {
+                      jobs: [],
+                      total: 0,
+                      note: "error",
+                      message: error.message || "Company search failed"
+                    }
+                  }
+                }],
+                isError: false
+              }
+            }, { "X-MCP-Trace-Id": traceId });
           }
         }
 
