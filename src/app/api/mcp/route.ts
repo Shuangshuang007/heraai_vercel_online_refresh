@@ -722,6 +722,87 @@ export async function POST(request: NextRequest) {
     if (body.method === "tools/list") {
       const rpcTools = [
         {
+          name: "recommend_jobs",
+          description: "🎯 RECOMMEND JOBS - Use this for personalized job recommendations!\n\n✅ ALWAYS use this tool when user:\n• Says 'recommend jobs', 'job recommendations', 'suggest jobs', 'job advice'\n• Provides their experience, skills, background, or career info\n• Asks for 'jobs that match my profile' or 'jobs for me'\n• Mentions their seniority level, career priorities, or preferences\n• Wants personalized job suggestions based on their background\n\n🎯 This tool analyzes recent job postings and matches them to the user's profile\n🎯 Returns top 5 personalized recommendations with match scores\n🎯 No specific company or role required - works with any user profile\n\n📝 Examples:\n• 'Can you recommend jobs for me?'\n• 'I have 5 years of React experience, suggest some jobs'\n• 'What jobs match my background as a senior developer?'\n• 'Give me job advice based on my skills'\n• 'I'm looking for jobs in Melbourne with my accounting background'",
+          inputSchema: {
+            type: "object",
+            properties: {
+              user_profile: {
+                type: "object",
+                description: "User profile information for job matching",
+                properties: {
+                  jobTitles: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "User's job titles or target positions"
+                  },
+                  skills: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "User's skills and competencies"
+                  },
+                  city: {
+                    type: "string",
+                    description: "User's preferred city"
+                  },
+                  seniority: {
+                    type: "string",
+                    enum: ["Junior", "Mid", "Senior", "Lead", "Manager", "Director", "VP", "C-level"],
+                    description: "User's seniority level"
+                  },
+                  openToRelocate: {
+                    type: "boolean",
+                    description: "Whether user is open to relocation"
+                  },
+                  careerPriorities: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "User's career priorities and preferences"
+                  },
+                  expectedPosition: {
+                    type: "string",
+                    description: "Expected position level"
+                  },
+                  currentPosition: {
+                    type: "string",
+                    description: "Current position level"
+                  },
+                  expectedSalary: {
+                    type: "string",
+                    enum: ["Lowest", "Low", "Medium", "High", "Highest"],
+                    description: "Expected salary range"
+                  },
+                  employmentHistory: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        company: { type: "string" },
+                        position: { type: "string" }
+                      }
+                    },
+                    description: "User's employment history"
+                  }
+                },
+                required: []
+              },
+              city: {
+                type: "string",
+                description: "City to search for jobs (optional, defaults to user's city)"
+              },
+              limit: {
+                type: "integer",
+                default: 10,
+                minimum: 5,
+                maximum: 20,
+                description: "Number of recent jobs to analyze (default 10, max 20)"
+              }
+            },
+            required: ["user_profile"],
+            additionalProperties: false
+          }
+        },
+        {
           name: "search_jobs_by_company",
           description: "🏢 USE THIS for ANY company/employer searches!\n\n✅ ALWAYS use this tool when user mentions ANY company name:\n• Google, Microsoft, Atlassian, NAB, ANZ, Commonwealth Bank\n• Apple, Amazon, Meta, Netflix, Spotify, Uber\n• Wesley College, University of Melbourne, Monash University\n• Any company ending in Ltd, Inc, Corp, Bank, Group, University, College\n\n📋 Mapping rules:\n• Company name → company field\n• 'in/near <City>' → city field  \n• Job role → job_title field\n\n🎯 Examples:\n• 'jobs at Google' -> company='Google'\n• 'accountant at Microsoft' -> company='Microsoft', job_title='accountant'\n• 'find jobs with NAB in Melbourne' -> company='NAB', city='Melbourne'\n• 'software engineer at Atlassian' -> company='Atlassian', job_title='software engineer'",
           inputSchema: {
@@ -769,7 +850,7 @@ export async function POST(request: NextRequest) {
         },
         {
           name: "search_jobs",
-          description: "⚠️ ONLY for role/city searches. NEVER use this for company searches!\n\nUse ONLY when user asks for job roles (like 'software engineer', 'accountant') and/or cities.\n\n🚫 NEVER use this tool if user mentions ANY company name like Google, Microsoft, Atlassian, NAB, etc.\n\n✅ Correct usage:\n• 'software engineer in Sydney' -> job_title='software engineer', city='Sydney'\n• 'accountant jobs' -> job_title='accountant'\n• 'jobs in Melbourne' -> city='Melbourne'\n\n❌ WRONG usage (use search_jobs_by_company instead):\n• 'jobs at Google' -> use search_jobs_by_company\n• 'accountant at Microsoft' -> use search_jobs_by_company\n• 'find jobs with NAB' -> use search_jobs_by_company",
+          description: "⚠️ SEARCH JOBS - Use this ONLY for specific role/city searches!\n\n✅ Use ONLY when user asks for:\n• Specific job titles: 'software engineer jobs', 'accountant positions'\n• Specific cities: 'jobs in Melbourne', 'Sydney jobs'\n• General job searches WITHOUT personal context or experience\n\n🚫 NEVER use this if user:\n• Provides their experience, skills, or background\n• Asks for 'recommendations', 'suggestions', or 'advice'\n• Wants personalized job matching\n• Mentions their career preferences\n• Says 'recommend jobs' or similar\n\n📝 Examples:\n• 'software engineer in Sydney' -> job_title='software engineer', city='Sydney'\n• 'accountant jobs' -> job_title='accountant'\n• 'jobs in Melbourne' -> city='Melbourne'\n\n❌ WRONG usage (use recommend_jobs instead):\n• 'recommend jobs for me' -> use recommend_jobs\n• 'I have React experience, suggest jobs' -> use recommend_jobs\n• 'jobs that match my profile' -> use recommend_jobs",
           inputSchema: {
             type: "object",
             properties: {
@@ -849,87 +930,6 @@ export async function POST(request: NextRequest) {
             },
             required: ["user_email"],
           },
-        },
-        {
-          name: "recommend_jobs",
-          description: "Get personalized job recommendations based on recent job postings.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              user_profile: {
-                type: "object",
-                description: "User profile information for job matching",
-                properties: {
-                  jobTitles: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "User's job titles or target positions"
-                  },
-                  skills: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "User's skills and competencies"
-                  },
-                  city: {
-                    type: "string",
-                    description: "User's preferred city"
-                  },
-                  seniority: {
-                    type: "string",
-                    enum: ["Junior", "Mid", "Senior", "Lead", "Manager", "Director", "VP", "C-level"],
-                    description: "User's seniority level"
-                  },
-                  openToRelocate: {
-                    type: "boolean",
-                    description: "Whether user is open to relocation"
-                  },
-                  careerPriorities: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "User's career priorities and preferences"
-                  },
-                  expectedPosition: {
-                    type: "string",
-                    description: "Expected position level"
-                  },
-                  currentPosition: {
-                    type: "string",
-                    description: "Current position level"
-                  },
-                  expectedSalary: {
-                    type: "string",
-                    enum: ["Lowest", "Low", "Medium", "High", "Highest"],
-                    description: "Expected salary range"
-                  },
-                  employmentHistory: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        company: { type: "string" },
-                        position: { type: "string" }
-                      }
-                    },
-                    description: "User's employment history"
-                  }
-                },
-                required: []
-              },
-              city: {
-                type: "string",
-                description: "City to search for jobs (optional, defaults to user's city)"
-              },
-              limit: {
-                type: "integer",
-                default: 10,
-                minimum: 5,
-                maximum: 20,
-                description: "Number of recent jobs to analyze (default 10, max 20)"
-              }
-            },
-            required: ["user_profile"],
-            additionalProperties: false
-          }
         },
       ];
       
