@@ -653,12 +653,12 @@ export async function GET(request: NextRequest) {
   return json200({
     tools: [
       {
-        name: 'jobs_at_company',
-        description: 'Find jobs at specific companies',
+        name: 'search_jobs',
+        description: `Search jobs (mode: ${HERA_MCP_MODE})`,
       },
       {
-        name: 'jobs_by_role_city',
-        description: `Search jobs by role and/or city (mode: ${HERA_MCP_MODE})`,
+        name: 'search_jobs_by_company',
+        description: 'Search jobs by specific company name',
       },
       {
         name: 'build_search_links', 
@@ -722,22 +722,22 @@ export async function POST(request: NextRequest) {
     if (body.method === "tools/list") {
       const rpcTools = [
         {
-          name: "jobs_at_company",
-          description: "Find jobs AT/WITH a COMPANY. Use whenever the user says 'jobs at <Company>', 'roles with <Company>', or names an employer. You may optionally filter by city and/or role.\n\nMapping:\n- 'at|with|from <Company>' => company\n- 'in|near <City>' => city\n- Remaining role words => job_title\n\nExamples:\n• 'find jobs at Google in Melbourne' -> company='Google', city='Melbourne'\n• 'roles with Atlassian' -> company='Atlassian'\n• 'NAB software engineer in Sydney' -> company='NAB', job_title='software engineer', city='Sydney'\n• 'accountant with KPMG' -> company='KPMG', job_title='accountant'",
+          name: "search_jobs_by_company",
+          description: "🏢 USE THIS for ANY company/employer searches!\n\n✅ ALWAYS use this tool when user mentions ANY company name:\n• Google, Microsoft, Atlassian, NAB, ANZ, Commonwealth Bank\n• Apple, Amazon, Meta, Netflix, Spotify, Uber\n• Wesley College, University of Melbourne, Monash University\n• Any company ending in Ltd, Inc, Corp, Bank, Group, University, College\n\n📋 Mapping rules:\n• Company name → company field\n• 'in/near <City>' → city field  \n• Job role → job_title field\n\n🎯 Examples:\n• 'jobs at Google' -> company='Google'\n• 'accountant at Microsoft' -> company='Microsoft', job_title='accountant'\n• 'find jobs with NAB in Melbourne' -> company='NAB', city='Melbourne'\n• 'software engineer at Atlassian' -> company='Atlassian', job_title='software engineer'",
           inputSchema: {
             type: "object",
             properties: {
               company: { 
                 type: "string", 
-                description: "Employer name, e.g., 'Google', 'Atlassian', 'NAB', 'KPMG'" 
+                description: "Employer name, e.g., 'Google', 'Atlassian', 'NAB'" 
               },
               city: { 
                 type: "string", 
-                description: "Optional city, e.g., 'Melbourne'" 
+                description: "Optional city filter, e.g., 'Melbourne'" 
               },
               job_title: { 
                 type: "string", 
-                description: "Optional role, e.g., 'software engineer', 'accountant'" 
+                description: "Optional role filter, e.g., 'software engineer'" 
               },
               page: { 
                 type: "integer", 
@@ -768,8 +768,8 @@ export async function POST(request: NextRequest) {
           },
         },
         {
-          name: "jobs_by_role_city",
-          description: "Find jobs by ROLE and/or CITY. Use this when the user mentions a role (e.g., 'software engineer') and/or a city (e.g., 'Melbourne').\n\nDO NOT use this if the user mentions an employer with 'at/with/from <Company>' (e.g., 'jobs at Google'). In those cases, call jobs_at_company instead.\n\nMapping:\n- 'in/near <City>' => city\n- Remaining role words => job_title\n- If 'at/with/from <Company>' appears => DO NOT call this; call jobs_at_company.\n\nExamples:\n• 'software engineer in Sydney' -> job_title='software engineer', city='Sydney'\n• 'data analyst roles' -> job_title='data analyst'\n• 'open roles in Brisbane' -> city='Brisbane'\n• 'find jobs with Google in Melbourne' -> USE jobs_at_company (not this).",
+          name: "search_jobs",
+          description: "⚠️ ONLY for role/city searches. NEVER use this for company searches!\n\nUse ONLY when user asks for job roles (like 'software engineer', 'accountant') and/or cities.\n\n🚫 NEVER use this tool if user mentions ANY company name like Google, Microsoft, Atlassian, NAB, etc.\n\n✅ Correct usage:\n• 'software engineer in Sydney' -> job_title='software engineer', city='Sydney'\n• 'accountant jobs' -> job_title='accountant'\n• 'jobs in Melbourne' -> city='Melbourne'\n\n❌ WRONG usage (use search_jobs_by_company instead):\n• 'jobs at Google' -> use search_jobs_by_company\n• 'accountant at Microsoft' -> use search_jobs_by_company\n• 'find jobs with NAB' -> use search_jobs_by_company",
           inputSchema: {
             type: "object",
             properties: {
@@ -869,17 +869,15 @@ export async function POST(request: NextRequest) {
 
       try {
         // ============================================
-        // Tool: jobs_by_role_city (FAST or FULL mode)
+        // Tool: search_jobs (FAST or FULL mode)
         // ============================================
-        if (name === "jobs_by_role_city") {
-          // Apply smart parameter correction (启用兜底修正)
-          const fixedArgs = fixArgs(args);
-          const jobTitle = fixedArgs.job_title;
-          const city = fixedArgs.city;
+        if (name === "search_jobs") {
+          const jobTitle = String(args?.job_title || "").trim();
+          const city = String(args?.city || "").trim();
           const requestMode = args?.mode || HERA_MCP_MODE; // Allow per-request override
 
-          // Validate required params (either job_title OR city is required)
-          if (!jobTitle && !city) {
+          // Validate required params
+          if (!jobTitle || !city) {
             return json200({
               jsonrpc: "2.0",
               id: body.id ?? null,
@@ -891,7 +889,7 @@ export async function POST(request: NextRequest) {
                       jobs: [],
                       total: 0,
                       note: "missing_params",
-                      message: "Either job_title or city is required"
+                      message: "job_title and city are required"
                     }
                   }
                 }],
@@ -1115,9 +1113,140 @@ export async function POST(request: NextRequest) {
         }
 
         // ============================================
-        // Tool: jobs_at_company
+        // Tool: jobs_at_company (alias for search_jobs_by_company)
         // ============================================
         else if (name === "jobs_at_company") {
+          // Apply smart parameter correction
+          const fixedArgs = fixArgs(args);
+          const companyName = fixedArgs.company;
+          const jobTitle = fixedArgs.job_title;
+          const city = fixedArgs.city;
+
+          // Validate required params
+          if (!companyName) {
+            return json200({
+              jsonrpc: "2.0",
+              id: body.id ?? null,
+              result: {
+                content: [{
+                  type: "json",
+                  data: {
+                    content: {
+                      jobs: [],
+                      total: 0,
+                      note: "missing_params",
+                      message: "company is required"
+                    }
+                  }
+                }],
+                isError: false
+              }
+            }, { "X-MCP-Trace-Id": traceId });
+          }
+
+          // Use FAST mode for company search (lightweight)
+          const t0 = Date.now();
+          const page = Math.max(1, Number(args?.page || 1));
+          const pageSize = 20; // Default page size
+          const postedWithinDays = Number(args?.posted_within_days || 0);
+          const platforms = Array.isArray(args?.platforms) ? args.platforms : undefined;
+
+          console.info("[TRACE]", traceId, "Company search (jobs_at_company):", { companyName, jobTitle, city });
+
+          // Build query parameters
+          const queryParams: FastQueryParams = {
+            title: jobTitle || undefined, // Only use job title if provided
+            city: city || undefined, // Only use city if provided
+            page,
+            pageSize,
+            postedWithinDays: postedWithinDays > 0 ? postedWithinDays : undefined,
+            platforms,
+            company: companyName, // Company filter is the main search criteria
+          };
+
+          try {
+            const result = await fastDbQuery(queryParams);
+            
+            // Generate highlights for jobs (reuse existing logic)
+            const jobsWithHighlights = await Promise.all(
+              result.jobs.slice(0, pageSize).map(async (job: any) => {
+                try {
+                  const highlights = await withTimeout(
+                    generateJobHighlights(job),
+                    3000 // Each job gets 3 seconds for highlights
+                  );
+                  return { ...job, highlights };
+                } catch (error) {
+                  console.error('[MCP] Highlights timeout for job:', job.id || job._id);
+                  // Fallback logic
+                  const fallbackHighlights = [
+                    `${job.company || job.company_name || 'Company'} seeking ${job.experience || 'candidate'}`,
+                    job.skills && job.skills.length > 0 
+                      ? `Requires: ${job.skills.slice(0, 5).join(', ')}`
+                      : 'View details for requirements'
+                  ];
+                  return { ...job, highlights: fallbackHighlights };
+                }
+              })
+            );
+            
+            // Map to safe format (preserve highlights)
+            const safeJobs = jobsWithHighlights.map((j: any) => ({
+              ...mapJobSafe(j),
+              highlights: j.highlights || []
+            }));
+            
+            // Generate Markdown cards preview with company info
+            const markdownPreview = buildMarkdownCards(
+              { title: jobTitle || `jobs from ${companyName}`, city }, 
+              safeJobs, 
+              result?.total || safeJobs.length
+            );
+
+            return new Response(JSON.stringify({
+              jsonrpc: "2.0",
+              id: body.id ?? null,
+              result: {
+                content: [
+                  { type: "text", text: markdownPreview }
+                ],
+                isError: false
+              }
+            }), {
+              status: 200,
+              headers: {
+                "content-type": "application/json; charset=utf-8",
+                "cache-control": "no-store"
+              }
+            });
+
+          } catch (error: any) {
+            console.error('[MCP] Company search error:', error);
+            return json200({
+              jsonrpc: "2.0",
+              id: body.id ?? null,
+              result: {
+                content: [{
+                  type: "json",
+                  data: {
+                    content: {
+                      jobs: [],
+                      total: 0,
+                      note: "error",
+                      message: error.message || "Company search failed"
+                    }
+                  }
+                }],
+                isError: false
+              }
+            }, { "X-MCP-Trace-Id": traceId });
+          }
+        }
+
+        // ============================================
+        // Tool: search_jobs_by_company
+        // ============================================
+        else if (name === "search_jobs_by_company") {
           // Apply smart parameter correction
           const fixedArgs = fixArgs(args);
           const companyName = fixedArgs.company;
