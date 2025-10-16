@@ -37,6 +37,49 @@ import {
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
+// Company name set for smart parameter correction
+const COMPANY_SET = new Set<string>([
+  "Google", "Atlassian", "NAB", "ANZ", "Commonwealth Bank", "Optus", "Telstra", 
+  "Microsoft", "Amazon", "Meta", "Apple", "Netflix", "Spotify", "Uber", "Airbnb",
+  "Wesley College Melbourne", "University of Melbourne", "Monash University",
+  "RMIT", "Swinburne", "Deakin University", "La Trobe University"
+]);
+
+// Smart parameter correction function
+function fixArgs(args: any) {
+  let { company, job_title, city, page, page_size } = args;
+  const norm = (s?: string) => (s || "").trim();
+
+  company = norm(company);
+  job_title = norm(job_title);
+  city = norm(city);
+
+  // If company is empty but job_title looks like company -> fix it
+  const looksLikeCompany =
+    job_title &&
+    (COMPANY_SET.has(job_title) ||
+     /pty\s*ltd|ltd|inc|corp|corporation|bank|group|university|college/i.test(job_title));
+
+  if (!company && looksLikeCompany) {
+    company = job_title;
+    job_title = "";
+  }
+
+  // Handle 'Google Software Engineer' -> company=Google, job_title=Software Engineer
+  if (!company && job_title) {
+    for (const name of COMPANY_SET) {
+      const re = new RegExp(`^${name}\\b`, "i");
+      if (re.test(job_title)) {
+        company = name;
+        job_title = job_title.replace(re, "").trim();
+        break;
+      }
+    }
+  }
+
+  return { company, job_title, city, page, page_size };
+}
+
 // MCP Mode: fast (lightweight) | full (deep analysis with GPT)
 const HERA_MCP_MODE = process.env.HERA_MCP_MODE || "fast";
 
@@ -679,74 +722,22 @@ export async function POST(request: NextRequest) {
     if (body.method === "tools/list") {
       const rpcTools = [
         {
-          name: "search_jobs",
-          description: HERA_MCP_MODE === "fast" 
-            ? "FAST: Lightweight search by title+city, newest first, paginated."
-            : "FULL: Deep search with GPT analysis and scoring.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              job_title: { 
-                type: "string", 
-                minLength: 1, 
-                description: "e.g., 'software engineer'" 
-              },
-              city: { 
-                type: "string", 
-                minLength: 1, 
-                description: "e.g., 'Melbourne'" 
-              },
-              page: { 
-                type: "integer", 
-                default: 1, 
-                minimum: 1,
-                description: "Page number for pagination"
-              },
-              page_size: { 
-                type: "integer", 
-                default: 20, 
-                minimum: 1, 
-                maximum: 50,
-                description: "Results per page (max 50)"
-              },
-              posted_within_days: {
-                type: "integer",
-                minimum: 1,
-                description: "Filter jobs posted within X days (optional)"
-              },
-              platforms: {
-                type: "array",
-                items: { type: "string" },
-                description: "Filter by platforms: seek, linkedin, jora, adzuna, etc. (optional)"
-              },
-              mode: {
-                type: "string",
-                enum: ["fast", "full"],
-                description: "Override default mode for this request (optional)"
-              }
-            },
-            required: ["job_title", "city"],
-            additionalProperties: false
-          },
-        },
-        {
           name: "search_jobs_by_company",
-          description: "Search jobs by specific company name with optional title and city filters.",
+          description: "Find jobs primarily by employer. Use this tool whenever the user mentions an employer with 'at'/'with'/'from' (e.g., 'jobs at Google', 'roles with Atlassian'). You may optionally add city and/or job_title filters.\n\nMapping rules:\n- 'at|with|from <Company>' => company\n- 'in|near <City>'         => city\n- Remaining role words     => job_title\n\nExamples:\n• 'find jobs at Google in Melbourne' -> company='Google', city='Melbourne'\n• 'roles with Atlassian' -> company='Atlassian'\n• 'NAB software engineer in Sydney' -> company='NAB', job_title='software engineer', city='Sydney'",
           inputSchema: {
             type: "object",
             properties: {
-              company_name: { 
+              company: { 
                 type: "string", 
-                minLength: 1, 
-                description: "Company name to search for, e.g., 'Google', 'Microsoft'" 
-              },
-              job_title: { 
-                type: "string", 
-                description: "Optional job title filter, e.g., 'software engineer'" 
+                description: "Employer name, e.g., 'Google', 'Atlassian', 'NAB'" 
               },
               city: { 
                 type: "string", 
                 description: "Optional city filter, e.g., 'Melbourne'" 
+              },
+              job_title: { 
+                type: "string", 
+                description: "Optional role filter, e.g., 'software engineer'" 
               },
               page: { 
                 type: "integer", 
@@ -772,7 +763,57 @@ export async function POST(request: NextRequest) {
                 description: "Filter by platforms: seek, linkedin, jora, adzuna, etc. (optional)" 
               }
             },
-            required: ["company_name"],
+            required: ["company"],
+            additionalProperties: false
+          },
+        },
+        {
+          name: "search_jobs",
+          description: "FAST job search by role and/or city. Use this tool when the user asks for a role (e.g., 'software engineer') and/or a city (e.g., 'Melbourne').\n\nDO NOT use this tool if the user mentions an employer with words like 'at' or 'with' (e.g., 'jobs at Google'). In that case, call search_jobs_by_company instead.\n\nMapping rules:\n- Phrases with 'in/near' => city\n- Remaining role words => job_title\n- If the user says 'at/with/from <Company>', DO NOT put the company into job_title — use search_jobs_by_company.\n\nExamples:\n• 'software engineer in Sydney' -> job_title='software engineer', city='Sydney'\n• 'data analyst roles' -> job_title='data analyst'\n• 'open roles in Brisbane' -> city='Brisbane'\n• 'find jobs with Google in Melbourne' -> use search_jobs_by_company, not this tool.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              job_title: { 
+                type: "string", 
+                description: "e.g., 'software engineer'" 
+              },
+              city: { 
+                type: "string", 
+                description: "City only, e.g., 'Melbourne', 'Sydney'" 
+              },
+              page: { 
+                type: "integer", 
+                default: 1, 
+                minimum: 1,
+                description: "Page number for pagination"
+              },
+              page_size: { 
+                type: "integer", 
+                default: 20, 
+                minimum: 1, 
+                maximum: 50, 
+                description: "Results per page (max 50)"
+              },
+              posted_within_days: {
+                type: "integer",
+                minimum: 1,
+                description: "Filter jobs posted within X days (optional)"
+              },
+              platforms: {
+                type: "array",
+                items: { type: "string" },
+                description: "Filter by platforms: seek, linkedin, jora, adzuna, etc. (optional)"
+              },
+              mode: {
+                type: "string",
+                enum: ["fast", "full"],
+                description: "Override default mode for this request (optional)"
+              }
+            },
+            anyOf: [
+              { "required": ["job_title"] },
+              { "required": ["city"] }
+            ],
             additionalProperties: false
           },
         },
@@ -1075,9 +1116,11 @@ export async function POST(request: NextRequest) {
         // Tool: search_jobs_by_company
         // ============================================
         else if (name === "search_jobs_by_company") {
-          const companyName = String(args?.company_name || "").trim();
-          const jobTitle = String(args?.job_title || "").trim();
-          const city = String(args?.city || "").trim();
+          // Apply smart parameter correction
+          const fixedArgs = fixArgs(args);
+          const companyName = fixedArgs.company;
+          const jobTitle = fixedArgs.job_title;
+          const city = fixedArgs.city;
 
           // Validate required params
           if (!companyName) {
@@ -1092,7 +1135,7 @@ export async function POST(request: NextRequest) {
                       jobs: [],
                       total: 0,
                       note: "missing_params",
-                      message: "company_name is required"
+                      message: "company is required"
                     }
                   }
                 }],
