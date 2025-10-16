@@ -17,7 +17,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchJobs } from '../../../services/jobFetchService';
 import { getUserProfile } from '../../../services/profileDatabaseService';
-import { connectToMongoDB } from '../../../services/jobDatabaseService';
+import { connectToMongoDB, transformMongoDBJobToFrontendFormat } from '../../../services/jobDatabaseService';
 import {
   deduplicateJobs,
   enhanceJobsWithSources,
@@ -850,6 +850,87 @@ export async function POST(request: NextRequest) {
             required: ["user_email"],
           },
         },
+        {
+          name: "recommend_jobs",
+          description: "Get personalized job recommendations based on recent job postings.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              user_profile: {
+                type: "object",
+                description: "User profile information for job matching",
+                properties: {
+                  jobTitles: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "User's job titles or target positions"
+                  },
+                  skills: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "User's skills and competencies"
+                  },
+                  city: {
+                    type: "string",
+                    description: "User's preferred city"
+                  },
+                  seniority: {
+                    type: "string",
+                    enum: ["Junior", "Mid", "Senior", "Lead", "Manager", "Director", "VP", "C-level"],
+                    description: "User's seniority level"
+                  },
+                  openToRelocate: {
+                    type: "boolean",
+                    description: "Whether user is open to relocation"
+                  },
+                  careerPriorities: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "User's career priorities and preferences"
+                  },
+                  expectedPosition: {
+                    type: "string",
+                    description: "Expected position level"
+                  },
+                  currentPosition: {
+                    type: "string",
+                    description: "Current position level"
+                  },
+                  expectedSalary: {
+                    type: "string",
+                    enum: ["Lowest", "Low", "Medium", "High", "Highest"],
+                    description: "Expected salary range"
+                  },
+                  employmentHistory: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        company: { type: "string" },
+                        position: { type: "string" }
+                      }
+                    },
+                    description: "User's employment history"
+                  }
+                },
+                required: []
+              },
+              city: {
+                type: "string",
+                description: "City to search for jobs (optional, defaults to user's city)"
+              },
+              limit: {
+                type: "integer",
+                default: 10,
+                minimum: 5,
+                maximum: 20,
+                description: "Number of recent jobs to analyze (default 10, max 20)"
+              }
+            },
+            required: ["user_profile"],
+            additionalProperties: false
+          }
+        },
       ];
       
       return json200({ 
@@ -1505,6 +1586,203 @@ export async function POST(request: NextRequest) {
               isError: false
             }
           }, { "X-MCP-Trace-Id": traceId });
+        }
+
+        // ============================================
+        // Tool: recommend_jobs
+        // ============================================
+        else if (name === "recommend_jobs") {
+          const { user_profile = {}, city, limit = 10 } = args;
+          
+          // 提供默认值，确保即使没有输入也能工作
+          const defaultProfile = {
+            skills: user_profile.skills || [],
+            city: user_profile.city || city || 'Melbourne',
+            seniority: user_profile.seniority || 'Mid',
+            jobTitles: user_profile.jobTitles || [],
+            openToRelocate: user_profile.openToRelocate || false,
+            careerPriorities: user_profile.careerPriorities || [],
+            expectedSalary: user_profile.expectedSalary || 'Medium',
+            currentPosition: user_profile.currentPosition || '',
+            expectedPosition: user_profile.expectedPosition || '',
+            employmentHistory: user_profile.employmentHistory || []
+          };
+
+          try {
+            // 1. 从数据库按时间顺序获取最近10个职位
+            const { db } = await connectToMongoDB();
+            const collection = db.collection('hera_jobs.jobs');
+            
+            const recentJobs = await collection
+              .find({ 
+                is_active: { $ne: false },
+                ...(defaultProfile.city && { location: { $regex: defaultProfile.city, $options: 'i' } })
+              })
+              .sort({ updatedAt: -1, createdAt: -1 })
+              .limit(limit)
+              .toArray();
+
+            // 转换为前端格式
+            const transformedJobs = recentJobs
+              .map((job: any) => transformMongoDBJobToFrontendFormat(job))
+              .filter((job: any) => job !== null);
+
+            if (transformedJobs.length === 0) {
+              return json200({
+                jsonrpc: "2.0",
+                id: body.id ?? null,
+                result: {
+                  content: [{
+                    type: "text",
+                    text: "No recent job postings found. Try adjusting your search criteria or check back later for new postings."
+                  }],
+                  isError: false
+                }
+              }, { "X-MCP-Trace-Id": traceId });
+            }
+
+            // 2. 发送给mirror-jobs进行基础分析
+            const mirrorResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/mirror-jobs`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                jobs: transformedJobs,
+                jobTitle: defaultProfile.jobTitles?.[0] || 'General',
+                city: defaultProfile.city,
+                limit: limit,
+                page: 1,
+                isHotJob: false,
+                platform: 'recommendation'
+              })
+            });
+
+            if (!mirrorResponse.ok) {
+              throw new Error(`Mirror-jobs API error: ${mirrorResponse.status}`);
+            }
+
+            const mirrorResult = await mirrorResponse.json();
+            const analyzedJobs = mirrorResult.jobs || [];
+
+            // 3. 对每个职位进行用户匹配分析
+            const scoredJobs = await Promise.all(
+              analyzedJobs.map(async (job: any) => {
+                try {
+                  const matchResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/gpt-services/jobMatch`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      jobTitle: job.title,
+                      jobDescription: job.description || '',
+                      jobRequirements: job.requirements || [],
+                      jobLocation: job.location,
+                      userProfile: {
+                        jobTitles: defaultProfile.jobTitles.length > 0 ? defaultProfile.jobTitles : [job.title],
+                        skills: defaultProfile.skills,
+                        city: defaultProfile.city,
+                        seniority: defaultProfile.seniority,
+                        openToRelocate: defaultProfile.openToRelocate,
+                        careerPriorities: defaultProfile.careerPriorities,
+                        expectedSalary: defaultProfile.expectedSalary,
+                        currentPosition: defaultProfile.currentPosition,
+                        expectedPosition: defaultProfile.expectedPosition,
+                        employmentHistory: defaultProfile.employmentHistory
+                      }
+                    }),
+                  });
+
+                  if (!matchResponse.ok) {
+                    throw new Error(`Match API error: ${matchResponse.status}`);
+                  }
+
+                  const matchData = await matchResponse.json();
+                  
+                  // 确保分数格式符合GPT要求
+                  const validatedSubScores = {
+                    experience: Math.min(Math.max(matchData.subScores?.experience || 50, 50), 95),
+                    industry: Math.min(Math.max(matchData.subScores?.industry || 50, 50), 95),
+                    skills: Math.min(Math.max(matchData.subScores?.skills || 50, 50), 90), // skills最高90
+                    other: Math.min(Math.max(matchData.subScores?.other || 50, 50), 95)
+                  };
+                  
+                  const validatedMatchScore = Math.min(Math.max(matchData.score || 50, 50), 95);
+                  
+                  return {
+                    ...job,
+                    matchScore: validatedMatchScore,
+                    subScores: validatedSubScores,
+                    matchAnalysis: matchData.analysis || 'Analysis not available',
+                    matchHighlights: matchData.highlights || [],
+                    summary: matchData.listSummary || job.summary || `${job.title} position at ${job.company}`,
+                    detailedSummary: matchData.detailedSummary || job.detailedSummary || job.description?.substring(0, 200) + '...',
+                    keyRequirements: matchData.keyRequirements || [],
+                    userType: matchData.userType || 'neutral'
+                  };
+                } catch (error) {
+                  console.error(`Error scoring job ${job.id}:`, error);
+                  return {
+                    ...job,
+                    matchScore: 50,
+                    subScores: { experience: 50, industry: 50, skills: 50, other: 50 },
+                    matchAnalysis: 'Unable to analyze',
+                    matchHighlights: [],
+                    summary: job.summary || `${job.title} position at ${job.company}`,
+                    detailedSummary: job.detailedSummary || job.description?.substring(0, 200) + '...',
+                    keyRequirements: [],
+                    userType: 'neutral'
+                  };
+                }
+              })
+            );
+
+            // 4. 按分数从高到低排序，返回前5个
+            const recommendedJobs = scoredJobs
+              .sort((a, b) => b.matchScore - a.matchScore)
+              .slice(0, 5);
+
+            // 5. 按照现有UI规则格式化显示，确保分数格式正确
+            const recommendations = recommendedJobs.map((job, index) => 
+              `**${index + 1}. ${job.title}** at ${job.company}\n` +
+              `📍 ${job.location} | 💼 ${job.jobType || 'Full-time'} | 💰 ${job.salary || 'Salary not specified'}\n` +
+              `\n**Job Highlights:**\n${job.matchHighlights?.map((h: string) => `• ${h}`).join('\n') || 'Analysis not available'}\n` +
+              `\n**Match Score: ${job.matchScore}%**\n` +
+              `• Experience: ${job.subScores.experience}% | Skills: ${job.subScores.skills}% | Industry: ${job.subScores.industry}% | Other: ${job.subScores.other}%\n` +
+              `\n🔗 [View Job](${job.url})\n` +
+              `\n---\n`
+            ).join('\n');
+
+            const summary = `Found ${recommendedJobs.length} personalized job recommendations based on recent postings. ` +
+              `All jobs are sorted by match score (${recommendedJobs[0]?.matchScore}% - ${recommendedJobs[recommendedJobs.length-1]?.matchScore}%).`;
+
+            return json200({
+              jsonrpc: "2.0",
+              id: body.id ?? null,
+              result: {
+                content: [{
+                  type: "text",
+                  text: `# 🎯 Personalized Job Recommendations\n\n${summary}\n\n${recommendations}`
+                }],
+                isError: false
+              }
+            }, { "X-MCP-Trace-Id": traceId });
+
+          } catch (error: any) {
+            console.error('[MCP] recommend_jobs error:', error);
+            return json200({
+              jsonrpc: "2.0",
+              id: body.id ?? null,
+              result: {
+                content: [{
+                  type: "text",
+                  text: `Failed to get job recommendations: ${error.message}`
+                }],
+                isError: false
+              }
+            }, { "X-MCP-Trace-Id": traceId });
+          }
         }
 
         // Unknown tool
