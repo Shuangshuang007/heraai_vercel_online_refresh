@@ -878,8 +878,8 @@ export async function POST(request: NextRequest) {
           const city = fixedArgs.city;
           const requestMode = args?.mode || HERA_MCP_MODE; // Allow per-request override
 
-          // Validate required params
-          if (!jobTitle || !city) {
+          // Validate required params (either job_title OR city is required)
+          if (!jobTitle && !city) {
             return json200({
               jsonrpc: "2.0",
               id: body.id ?? null,
@@ -891,7 +891,7 @@ export async function POST(request: NextRequest) {
                       jobs: [],
                       total: 0,
                       note: "missing_params",
-                      message: "job_title and city are required"
+                      message: "Either job_title or city is required"
                     }
                   }
                 }],
