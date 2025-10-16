@@ -22,6 +22,7 @@ export interface Job {
     experience: number;
     industry: number;
     skills: number;
+    other: number;
   };
   matchAnalysis?: string;
   matchHighlights?: string[];
