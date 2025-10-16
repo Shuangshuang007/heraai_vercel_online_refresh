@@ -1670,10 +1670,14 @@ export async function POST(request: NextRequest) {
             const analyzedJobs = mirrorResult.jobs || [];
 
             // 3. 对每个职位进行用户匹配分析
+            console.log(`[MCP] Starting GPT matching for ${analyzedJobs.length} jobs`);
             const scoredJobs = await Promise.all(
               analyzedJobs.map(async (job: any) => {
                 try {
-                  const matchResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/gpt-services/jobMatch`, {
+                  console.log(`[MCP] Calling GPT for job: ${job.title}`);
+                  const gptApiUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/gpt-services/jobMatch`;
+                  console.log(`[MCP] GPT API URL: ${gptApiUrl}`);
+                  const matchResponse = await fetch(gptApiUrl, {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',
@@ -1704,12 +1708,13 @@ export async function POST(request: NextRequest) {
 
                   const matchData = await matchResponse.json();
                   
-                  // 添加调试日志
-                  console.log(`[MCP] Job ${job.title} - GPT Response:`, JSON.stringify({
-                    score: matchData.score,
-                    subScores: matchData.subScores,
-                    highlights: matchData.highlights?.length || 0
-                  }, null, 2));
+                  // 添加调试日志 - 使用更明显的格式
+                  console.log(`[MCP] ===== JOB SCORING DEBUG =====`);
+                  console.log(`[MCP] Job Title: ${job.title}`);
+                  console.log(`[MCP] GPT Raw Response:`, matchData);
+                  console.log(`[MCP] Score from GPT: ${matchData.score}`);
+                  console.log(`[MCP] SubScores from GPT:`, matchData.subScores);
+                  console.log(`[MCP] ================================`);
                   
                   // 确保分数格式符合GPT要求
                   const validatedSubScores = {
