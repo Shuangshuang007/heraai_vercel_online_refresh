@@ -653,12 +653,12 @@ export async function GET(request: NextRequest) {
   return json200({
     tools: [
       {
-        name: 'search_jobs',
-        description: `Search jobs (mode: ${HERA_MCP_MODE})`,
+        name: 'jobs_at_company',
+        description: 'Find jobs at specific companies',
       },
       {
-        name: 'search_jobs_by_company',
-        description: 'Search jobs by specific company name',
+        name: 'jobs_by_role_city',
+        description: `Search jobs by role and/or city (mode: ${HERA_MCP_MODE})`,
       },
       {
         name: 'build_search_links', 
@@ -722,22 +722,22 @@ export async function POST(request: NextRequest) {
     if (body.method === "tools/list") {
       const rpcTools = [
         {
-          name: "search_jobs_by_company",
-          description: "Find jobs primarily by employer. Use this tool whenever the user mentions an employer with 'at'/'with'/'from' (e.g., 'jobs at Google', 'roles with Atlassian'). You may optionally add city and/or job_title filters.\n\nMapping rules:\n- 'at|with|from <Company>' => company\n- 'in|near <City>'         => city\n- Remaining role words     => job_title\n\nExamples:\n• 'find jobs at Google in Melbourne' -> company='Google', city='Melbourne'\n• 'roles with Atlassian' -> company='Atlassian'\n• 'NAB software engineer in Sydney' -> company='NAB', job_title='software engineer', city='Sydney'",
+          name: "jobs_at_company",
+          description: "Find jobs AT/WITH a COMPANY. Use whenever the user says 'jobs at <Company>', 'roles with <Company>', or names an employer. You may optionally filter by city and/or role.\n\nMapping:\n- 'at|with|from <Company>' => company\n- 'in|near <City>' => city\n- Remaining role words => job_title\n\nExamples:\n• 'find jobs at Google in Melbourne' -> company='Google', city='Melbourne'\n• 'roles with Atlassian' -> company='Atlassian'\n• 'NAB software engineer in Sydney' -> company='NAB', job_title='software engineer', city='Sydney'\n• 'accountant with KPMG' -> company='KPMG', job_title='accountant'",
           inputSchema: {
             type: "object",
             properties: {
               company: { 
                 type: "string", 
-                description: "Employer name, e.g., 'Google', 'Atlassian', 'NAB'" 
+                description: "Employer name, e.g., 'Google', 'Atlassian', 'NAB', 'KPMG'" 
               },
               city: { 
                 type: "string", 
-                description: "Optional city filter, e.g., 'Melbourne'" 
+                description: "Optional city, e.g., 'Melbourne'" 
               },
               job_title: { 
                 type: "string", 
-                description: "Optional role filter, e.g., 'software engineer'" 
+                description: "Optional role, e.g., 'software engineer', 'accountant'" 
               },
               page: { 
                 type: "integer", 
@@ -768,8 +768,8 @@ export async function POST(request: NextRequest) {
           },
         },
         {
-          name: "search_jobs",
-          description: "FAST job search by role and/or city. Use this tool when the user asks for a role (e.g., 'software engineer') and/or a city (e.g., 'Melbourne').\n\nDO NOT use this tool if the user mentions an employer with words like 'at' or 'with' (e.g., 'jobs at Google'). In that case, call search_jobs_by_company instead.\n\nMapping rules:\n- Phrases with 'in/near' => city\n- Remaining role words => job_title\n- If the user says 'at/with/from <Company>', DO NOT put the company into job_title — use search_jobs_by_company.\n\nExamples:\n• 'software engineer in Sydney' -> job_title='software engineer', city='Sydney'\n• 'data analyst roles' -> job_title='data analyst'\n• 'open roles in Brisbane' -> city='Brisbane'\n• 'find jobs with Google in Melbourne' -> use search_jobs_by_company, not this tool.",
+          name: "jobs_by_role_city",
+          description: "Find jobs by ROLE and/or CITY. Use this when the user mentions a role (e.g., 'software engineer') and/or a city (e.g., 'Melbourne').\n\nDO NOT use this if the user mentions an employer with 'at/with/from <Company>' (e.g., 'jobs at Google'). In those cases, call jobs_at_company instead.\n\nMapping:\n- 'in/near <City>' => city\n- Remaining role words => job_title\n- If 'at/with/from <Company>' appears => DO NOT call this; call jobs_at_company.\n\nExamples:\n• 'software engineer in Sydney' -> job_title='software engineer', city='Sydney'\n• 'data analyst roles' -> job_title='data analyst'\n• 'open roles in Brisbane' -> city='Brisbane'\n• 'find jobs with Google in Melbourne' -> USE jobs_at_company (not this).",
           inputSchema: {
             type: "object",
             properties: {
@@ -869,11 +869,13 @@ export async function POST(request: NextRequest) {
 
       try {
         // ============================================
-        // Tool: search_jobs (FAST or FULL mode)
+        // Tool: jobs_by_role_city (FAST or FULL mode)
         // ============================================
-        if (name === "search_jobs") {
-          const jobTitle = String(args?.job_title || "").trim();
-          const city = String(args?.city || "").trim();
+        if (name === "jobs_by_role_city") {
+          // Apply smart parameter correction (启用兜底修正)
+          const fixedArgs = fixArgs(args);
+          const jobTitle = fixedArgs.job_title;
+          const city = fixedArgs.city;
           const requestMode = args?.mode || HERA_MCP_MODE; // Allow per-request override
 
           // Validate required params
@@ -1113,9 +1115,9 @@ export async function POST(request: NextRequest) {
         }
 
         // ============================================
-        // Tool: search_jobs_by_company
+        // Tool: jobs_at_company
         // ============================================
-        else if (name === "search_jobs_by_company") {
+        else if (name === "jobs_at_company") {
           // Apply smart parameter correction
           const fixedArgs = fixArgs(args);
           const companyName = fixedArgs.company;
