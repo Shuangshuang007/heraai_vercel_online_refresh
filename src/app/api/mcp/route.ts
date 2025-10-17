@@ -723,7 +723,7 @@ export async function POST(request: NextRequest) {
       const rpcTools = [
         {
           name: "recommend_jobs",
-          description: "🎯 PERSONALIZED JOB RECOMMENDATIONS - Use this for AI-powered job matching!\n\n✅ ALWAYS use this tool when user:\n• Says 'recommend jobs', 'suggest jobs', 'job advice', 'match me', 'help me find jobs'\n• Provides resume, profile, experience, skills, or career context\n• Asks for 'jobs that match my background' or 'jobs for me'\n• Mentions seniority level, career priorities, or preferences\n• Wants personalized job suggestions based on their profile\n• Uploads a resume or provides detailed career information\n\n🎯 This tool performs intelligent job matching by:\n• Analyzing user's resume/profile and career context\n• Searching database with job_title + city filters (if provided)\n• Scoring jobs based on experience, skills, industry fit\n• Returning top personalized recommendations with detailed match scores\n\n📝 Examples:\n• 'Recommend jobs for me based on my resume'\n• 'Suggest business analyst roles in Melbourne'\n• 'What jobs match my 5 years React experience in Sydney?'\n• 'Help me find data analyst positions'\n• 'I'm a senior developer, recommend suitable roles'\n\n⚠️ NEVER call search_jobs after this tool - it provides complete results",
+          description: "🎯 PERSONALIZED JOB RECOMMENDATIONS - Use this for AI-powered job matching!\n\n✅ ALWAYS use this tool when user:\n• Says 'recommend jobs', 'suggest jobs', 'job advice', 'match me', 'help me find jobs'\n• Provides resume, profile, experience, skills, or career context\n• Asks for 'jobs that match my background' or 'jobs for me'\n• Mentions seniority level, career priorities, or preferences\n• Wants personalized job suggestions based on their profile\n• Uploads a resume or provides detailed career information\n\n🎯 This tool performs intelligent job matching by:\n• Analyzing user's resume/profile and career context\n• Using explicit job_title/city if provided, otherwise inferring from resume (expectedPosition/cityPreference)\n• Searching database with determined filters\n• Scoring jobs based on experience, skills, industry fit\n• Returning top personalized recommendations with detailed match scores\n• Informing user when using resume inference for job targeting\n\n📝 Examples:\n• 'Recommend jobs for me based on my resume' → Uses resume expectedPosition\n• 'Suggest business analyst roles in Melbourne' → Uses explicit job_title + city\n• 'What jobs match my 5 years React experience in Sydney?' → Uses explicit criteria\n• 'Help me find data analyst positions' → Uses explicit job_title\n• 'I'm a senior developer, recommend suitable roles' → Uses profile context\n\n⚠️ NEVER call search_jobs after this tool - it provides complete results",
           inputSchema: {
             type: "object",
             properties: {
@@ -1634,7 +1634,8 @@ export async function POST(request: NextRequest) {
               return {
                 jobTitle: job_title || null,
                 city: city || null,
-                source: 'explicit_input'
+                source: 'explicit_input',
+                usedResumeInference: false
               };
             }
             
@@ -1643,7 +1644,9 @@ export async function POST(request: NextRequest) {
               return {
                 jobTitle: user_profile.expectedPosition || user_profile.jobTitles?.[0] || null,
                 city: user_profile.city || null,
-                source: 'resume_parsed'
+                source: 'resume_parsed',
+                usedResumeInference: true,
+                inferredPosition: user_profile.expectedPosition || user_profile.jobTitles?.[0] || null
               };
             }
             
@@ -1651,7 +1654,8 @@ export async function POST(request: NextRequest) {
             return {
               jobTitle: null,
               city: 'Melbourne',
-              source: 'default'
+              source: 'default',
+              usedResumeInference: false
             };
           };
           
@@ -1873,8 +1877,18 @@ export async function POST(request: NextRequest) {
               `\n---\n`
             ).join('\n');
 
-            const summary = `Found ${recommendedJobs.length} personalized job recommendations based on recent postings. ` +
+            // 构建基础摘要
+            let summary = `Found ${recommendedJobs.length} personalized job recommendations based on recent postings. ` +
               `All jobs are sorted by match score (${recommendedJobs[0]?.matchScore}% - ${recommendedJobs[recommendedJobs.length-1]?.matchScore}%).`;
+            
+            // 如果使用了简历推测，添加说明
+            if (searchCriteria.usedResumeInference && searchCriteria.inferredPosition) {
+              summary += `\n\n💡 **根据你的简历推测目标职位为『${searchCriteria.inferredPosition}』**`;
+              if (searchCriteria.city) {
+                summary += `，地点为『${searchCriteria.city}』`;
+              }
+              summary += `。如有其他补充信息或想法，请告诉我！`;
+            }
 
             return json200({
               jsonrpc: "2.0",
