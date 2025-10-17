@@ -723,7 +723,7 @@ export async function POST(request: NextRequest) {
       const rpcTools = [
         {
           name: "recommend_jobs",
-          description: "🎯 RECOMMEND JOBS - Use this for personalized job recommendations!\n\n✅ ALWAYS use this tool when user:\n• Says 'recommend jobs', 'job recommendations', 'suggest jobs', 'job advice'\n• Provides their experience, skills, background, or career info\n• Asks for 'jobs that match my profile' or 'jobs for me'\n• Mentions their seniority level, career priorities, or preferences\n• Wants personalized job suggestions based on their background\n\n🎯 This tool analyzes recent job postings and matches them to the user's profile\n🎯 Returns top 5 personalized recommendations with match scores\n🎯 No specific company or role required - works with any user profile\n\n📝 Examples:\n• 'Can you recommend jobs for me?'\n• 'I have 5 years of React experience, suggest some jobs'\n• 'What jobs match my background as a senior developer?'\n• 'Give me job advice based on my skills'\n• 'I'm looking for jobs in Melbourne with my accounting background'",
+          description: "🎯 PERSONALIZED JOB RECOMMENDATIONS - Use this for AI-powered job matching!\n\n✅ ALWAYS use this tool when user:\n• Says 'recommend jobs', 'suggest jobs', 'job advice', 'match me', 'help me find jobs'\n• Provides resume, profile, experience, skills, or career context\n• Asks for 'jobs that match my background' or 'jobs for me'\n• Mentions seniority level, career priorities, or preferences\n• Wants personalized job suggestions based on their profile\n• Uploads a resume or provides detailed career information\n\n🎯 This tool performs intelligent job matching by:\n• Analyzing user's resume/profile and career context\n• Searching database with job_title + city filters (if provided)\n• Scoring jobs based on experience, skills, industry fit\n• Returning top personalized recommendations with detailed match scores\n\n📝 Examples:\n• 'Recommend jobs for me based on my resume'\n• 'Suggest business analyst roles in Melbourne'\n• 'What jobs match my 5 years React experience in Sydney?'\n• 'Help me find data analyst positions'\n• 'I'm a senior developer, recommend suitable roles'\n\n⚠️ NEVER call search_jobs after this tool - it provides complete results",
           inputSchema: {
             type: "object",
             properties: {
@@ -786,9 +786,13 @@ export async function POST(request: NextRequest) {
                 },
                 required: []
               },
+              job_title: {
+                type: "string",
+                description: "Specific job title to search for (optional, e.g. 'business analyst', 'software engineer')"
+              },
               city: {
                 type: "string",
-                description: "City to search for jobs (optional, defaults to user's city)"
+                description: "City to search for jobs (optional, e.g. 'Melbourne', 'Sydney')"
               },
               limit: {
                 type: "integer",
@@ -796,6 +800,16 @@ export async function POST(request: NextRequest) {
                 minimum: 5,
                 maximum: 20,
                 description: "Number of recent jobs to analyze (default 10, max 20)"
+              },
+              use_chat_context: {
+                type: "boolean",
+                default: true,
+                description: "Whether to use recent chat context for profile signals"
+              },
+              strict_filters: {
+                type: "boolean",
+                default: true,
+                description: "If true and job_title/city provided, enforce them as database filters before scoring"
               }
             },
             required: ["user_profile"],
@@ -850,7 +864,7 @@ export async function POST(request: NextRequest) {
         },
         {
           name: "search_jobs",
-          description: "⚠️ SEARCH JOBS - Use this ONLY for specific role/city searches!\n\n✅ Use ONLY when user asks for:\n• Specific job titles: 'software engineer jobs', 'accountant positions'\n• Specific cities: 'jobs in Melbourne', 'Sydney jobs'\n• General job searches WITHOUT personal context or experience\n\n🚫 NEVER use this if user:\n• Provides their experience, skills, or background\n• Asks for 'recommendations', 'suggestions', or 'advice'\n• Wants personalized job matching\n• Mentions their career preferences\n• Says 'recommend jobs' or similar\n\n📝 Examples:\n• 'software engineer in Sydney' -> job_title='software engineer', city='Sydney'\n• 'accountant jobs' -> job_title='accountant'\n• 'jobs in Melbourne' -> city='Melbourne'\n\n❌ WRONG usage (use recommend_jobs instead):\n• 'recommend jobs for me' -> use recommend_jobs\n• 'I have React experience, suggest jobs' -> use recommend_jobs\n• 'jobs that match my profile' -> use recommend_jobs",
+          description: "🔍 LISTING SEARCH - Use this ONLY for simple job searches!\n\n✅ Use ONLY when user asks for:\n• 'find jobs', 'search jobs', 'browse jobs' WITHOUT personal context\n• Specific job titles: 'software engineer jobs', 'accountant positions'\n• Specific cities: 'jobs in Melbourne', 'Sydney jobs'\n• General job searches WITHOUT resume/profile/experience context\n\n🚫 NEVER use this if user:\n• Says 'recommend', 'suggest', 'advice', 'match', 'help me find'\n• Provides resume, profile, experience, skills, or background\n• Asks for personalized job matching or career advice\n• Mentions seniority level, career priorities, or preferences\n• Wants job recommendations based on their profile\n\n📝 Examples:\n• 'find software engineer jobs in Sydney'\n• 'search for accountant positions'\n• 'browse jobs in Melbourne'\n\n❌ WRONG usage (use recommend_jobs instead):\n• 'recommend jobs for me' -> use recommend_jobs\n• 'suggest jobs based on my resume' -> use recommend_jobs\n• 'help me find jobs that match my experience' -> use recommend_jobs",
           inputSchema: {
             type: "object",
             properties: {
@@ -1102,7 +1116,12 @@ export async function POST(request: NextRequest) {
                 content: [
                   { type: "text", text: markdownPreview }
                 ],
-                isError: false
+                isError: false,
+                // 添加isFinal标记防止重复调用
+                mode: "search",
+                query_used: { job_title: jobTitle, city: city },
+                total: safeJobs.length,
+                isFinal: true
               }
             }), {
               status: 200,
@@ -1181,7 +1200,12 @@ export async function POST(request: NextRequest) {
                       }
                     }
                   }],
-                  isError: false
+                  isError: false,
+                  // 添加isFinal标记防止重复调用
+                  mode: "search",
+                  query_used: { job_title: jobTitle, city: city },
+                  total: processedJobs?.length ?? 0,
+                  isFinal: true
                 }
               },
               { 
@@ -1592,12 +1616,52 @@ export async function POST(request: NextRequest) {
         // Tool: recommend_jobs
         // ============================================
         else if (name === "recommend_jobs") {
-          const { user_profile = {}, city, limit = 10 } = args;
+          const { 
+            user_profile = {}, 
+            job_title, 
+            city, 
+            limit = 10, 
+            use_chat_context = true, 
+            strict_filters = true 
+          } = args;
           
-          // 提供更丰富的默认值，确保即使没有输入也能工作
+          console.log('[MCP] recommend_jobs - Input args:', { job_title, city, limit, use_chat_context, strict_filters });
+          
+          // 信息优先级处理：对话明确信息 > 简历解析信息 > 默认值
+          const determineSearchCriteria = () => {
+            // 1. 对话明确信息（最高优先级）
+            if (job_title || city) {
+              return {
+                jobTitle: job_title || null,
+                city: city || null,
+                source: 'explicit_input'
+              };
+            }
+            
+            // 2. 简历解析信息（中等优先级）
+            if (user_profile.expectedPosition || user_profile.jobTitles?.[0] || user_profile.city) {
+              return {
+                jobTitle: user_profile.expectedPosition || user_profile.jobTitles?.[0] || null,
+                city: user_profile.city || null,
+                source: 'resume_parsed'
+              };
+            }
+            
+            // 3. 默认值（最低优先级）
+            return {
+              jobTitle: null,
+              city: 'Melbourne',
+              source: 'default'
+            };
+          };
+          
+          const searchCriteria = determineSearchCriteria();
+          console.log('[MCP] Search criteria determined:', searchCriteria);
+          
+          // 构建用户档案，保持现有的简历解析逻辑
           const defaultProfile = {
             skills: user_profile.skills && user_profile.skills.length > 0 ? user_profile.skills : ['General Skills', 'Problem Solving', 'Communication'],
-            city: user_profile.city || city || 'Melbourne',
+            city: searchCriteria.city || 'Melbourne',
             seniority: user_profile.seniority || 'Mid',
             jobTitles: user_profile.jobTitles && user_profile.jobTitles.length > 0 ? user_profile.jobTitles : ['General Professional'],
             openToRelocate: user_profile.openToRelocate || false,
@@ -1610,20 +1674,40 @@ export async function POST(request: NextRequest) {
             ]
           };
           
-          console.log('[MCP] recommend_jobs - User profile:', JSON.stringify(defaultProfile, null, 2));
+          console.log('[MCP] recommend_jobs - Final profile:', JSON.stringify(defaultProfile, null, 2));
 
           try {
-            // 1. 从数据库按时间顺序获取最近10个职位
+            // 1. 根据搜索条件从数据库获取职位
             const { db } = await connectToMongoDB();
             const collection = db.collection('hera_jobs.jobs');
             
+            // 构建查询条件
+            const query: any = { is_active: { $ne: false } };
+            
+            // 如果启用了严格筛选且有明确的搜索条件
+            if (strict_filters && (searchCriteria.jobTitle || searchCriteria.city)) {
+              if (searchCriteria.jobTitle) {
+                query.$or = [
+                  { title: { $regex: searchCriteria.jobTitle, $options: 'i' } },
+                  { summary: { $regex: searchCriteria.jobTitle, $options: 'i' } }
+                ];
+              }
+              if (searchCriteria.city) {
+                query.location = { $regex: searchCriteria.city, $options: 'i' };
+              }
+            } else if (searchCriteria.city) {
+              // 只有城市筛选
+              query.location = { $regex: searchCriteria.city, $options: 'i' };
+            }
+            
+            console.log('[MCP] Database query:', JSON.stringify(query, null, 2));
+            
+            // 获取更多职位用于筛选，确保有足够的选择
+            const searchLimit = Math.max(limit * 3, 30);
             const recentJobs = await collection
-              .find({ 
-                is_active: { $ne: false },
-                ...(defaultProfile.city && { location: { $regex: defaultProfile.city, $options: 'i' } })
-              })
+              .find(query)
               .sort({ updatedAt: -1, createdAt: -1 })
-              .limit(limit)
+              .limit(searchLimit)
               .toArray();
 
             // 转换为前端格式
@@ -1800,7 +1884,16 @@ export async function POST(request: NextRequest) {
                   type: "text",
                   text: `# 🎯 Personalized Job Recommendations\n\n${summary}\n\n${recommendations}`
                 }],
-                isError: false
+                isError: false,
+                // 添加isFinal标记防止重复调用
+                mode: "recommend",
+                query_used: { 
+                  job_title: searchCriteria.jobTitle, 
+                  city: searchCriteria.city 
+                },
+                used_resume: true,
+                total: recommendedJobs.length,
+                isFinal: true
               }
             }, { "X-MCP-Trace-Id": traceId });
 
