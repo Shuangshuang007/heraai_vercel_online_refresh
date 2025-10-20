@@ -1,0 +1,10 @@
+{
+  "name": "pdf-parse-lite",
+  "version": "1.0.0",
+  "description": "Lightweight PDF parsing library",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "dependencies": {
+    "pdf-parse-debugging-disabled": "^1.1.1"
+  }
+} 

@@ -196,7 +196,7 @@ export class AgentKitDatabase {
         .limit(limit)
         .toArray();
 
-      return docs.map(doc => ({
+      return docs.map((doc: any) => ({
         planId: doc.planId,
         sessionId: doc.sessionId,
         steps: doc.steps || [],

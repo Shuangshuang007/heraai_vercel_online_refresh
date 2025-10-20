@@ -58,4 +58,3 @@ export interface ToolExecutionContext {
   sessionId: string;
   args: Record<string, any>;
 }
-

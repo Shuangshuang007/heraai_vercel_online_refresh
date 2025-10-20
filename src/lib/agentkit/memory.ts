@@ -3,7 +3,8 @@
 // ============================================
 
 import { AgentKitDatabase } from './database';
-import type { AgentKitMemory } from './types';
+import { connectToMongoDB } from '../../services/jobDatabaseService';
+import type { AgentKitMemory as AgentKitMemoryType } from './types';
 
 /**
  * AgentKit Memory Management - Handles session context and state persistence
@@ -18,11 +19,11 @@ export class AgentKitMemory {
   /**
    * Store or update session memory
    */
-  async storeContext(sessionId: string, context: Partial<AgentKitMemory['context']>): Promise<void> {
+  async storeContext(sessionId: string, context: Partial<AgentKitMemoryType['context']>): Promise<void> {
     try {
       const existingMemory = await this.db.getMemory(sessionId);
       
-      const memoryData: AgentKitMemory = {
+      const memoryData: AgentKitMemoryType = {
         sessionId,
         context: {
           ...existingMemory?.context,
@@ -42,7 +43,7 @@ export class AgentKitMemory {
   /**
    * Retrieve session context
    */
-  async getContext(sessionId: string): Promise<AgentKitMemory | null> {
+  async getContext(sessionId: string): Promise<AgentKitMemoryType | null> {
     try {
       return await this.db.getMemory(sessionId);
     } catch (error) {

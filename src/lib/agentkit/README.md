@@ -165,4 +165,3 @@ curl -X POST http://localhost:3000/api/mcp \
 2. 验证环境变量`MONGODB_URI`设置
 3. 检查现有MCP工具API可用性
 4. 监控数据库索引性能
-

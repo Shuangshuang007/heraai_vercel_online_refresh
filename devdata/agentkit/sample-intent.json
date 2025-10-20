@@ -1,0 +1,9 @@
+{
+  "primary": "find_jobs",
+  "readiness": "needs_resume",
+  "blockers": [
+    "resume_missing",
+    "profile_incomplete"
+  ],
+  "confidence": 0.85
+}

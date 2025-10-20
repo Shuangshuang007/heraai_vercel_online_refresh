@@ -1,0 +1,56 @@
+{
+  "id": "pln_1704067200000_demo123",
+  "userId": "demo_user_123",
+  "intent": {
+    "primary": "find_jobs",
+    "readiness": "needs_resume",
+    "blockers": [
+      "resume_missing",
+      "profile_incomplete"
+    ],
+    "confidence": 0.85
+  },
+  "steps": [
+    {
+      "id": "s1",
+      "tool": "parseResume",
+      "args": {
+        "autoParse": true,
+        "extractSkills": true,
+        "extractExperience": true
+      },
+      "priority": 1
+    },
+    {
+      "id": "s2",
+      "tool": "updateProfile",
+      "args": {
+        "source": "resume_parsed",
+        "overwrite": false
+      },
+      "priority": 2
+    },
+    {
+      "id": "s3",
+      "tool": "searchJobs",
+      "args": {
+        "limit": 20,
+        "includeRemote": true,
+        "matchSkills": true
+      },
+      "priority": 3
+    },
+    {
+      "id": "s4",
+      "tool": "rankRecommend",
+      "args": {
+        "algorithm": "skill_match",
+        "weightSkills": 0.6,
+        "weightExperience": 0.4
+      },
+      "priority": 4
+    }
+  ],
+  "createdAt": "2024-01-01T00:00:00.000Z",
+  "version": "v1.0.0"
+}
