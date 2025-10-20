@@ -33,6 +33,36 @@ export const greaterAreaMap: Record<string, GreaterAreaDefinition> = {
       "Burwood", "Rhodes", "Concord", "Leichhardt", "Balmain", "Marrickville",
       "Dulwich Hill", "Five Dock", "Drummoyne", "St Peters", "Sydenham", "Hurstville"
     ]
+  },
+
+  Perth: {
+    core: [
+      "Perth", "Northbridge", "East Perth", "West Perth", "Highgate", "Mount Lawley",
+      "Leederville", "Subiaco", "West Leederville", "Shenton Park", "Jolimont", 
+      "Daglish", "Wembley", "Glendalough", "Scarborough", "Trigg", "City Beach",
+      "Floreat", "Dalkeith", "Nedlands", "Crawley", "Claremont", "Cottesloe"
+    ],
+    fringe: [
+      "Fremantle", "South Fremantle", "North Fremantle", "White Gum Valley",
+      "Bibra Lake", "Cockburn Central", "Success", "Atwell", "Aubin Grove",
+      "Canning Vale", "Willetton", "Bull Creek", "Murdoch", "Winthrop",
+      "Bentley", "Victoria Park", "Lathlain", "Carlisle", "Burswood", "Rivervale"
+    ]
+  },
+
+  Brisbane: {
+    core: [
+      "Brisbane", "Fortitude Valley", "New Farm", "Teneriffe", "Newstead", "Bowen Hills",
+      "Herston", "Kelvin Grove", "Red Hill", "Paddington", "Bardon", "Ashgrove",
+      "Auchenflower", "Toowong", "St Lucia", "West End", "South Brisbane",
+      "Kangaroo Point", "Woolloongabba", "East Brisbane", "Coorparoo", "Greenslopes"
+    ],
+    fringe: [
+      "Chermside", "Aspley", "Bracken Ridge", "Bald Hills", "Strathpine", "Lawnton",
+      "Petrie", "Kallangur", "North Lakes", "Mango Hill", "Redcliffe", "Scarborough",
+      "Sandgate", "Shorncliffe", "Wynnum", "Manly", "Cleveland", "Capalaba",
+      "Carindale", "Mount Gravatt", "Eight Mile Plains", "Sunnybank", "Runcorn"
+    ]
   }
 };
 
@@ -56,8 +86,8 @@ export function isFringeLocation(location: string, city: string): boolean {
  * 获取位置权重
  * @param location 职位位置
  * @param city 用户选择的城市
- * @returns 权重系数（fringe区域为0.9，其他为1.0）
+ * @returns 权重系数（fringe区域为0.85，其他为1.0）
  */
 export function getLocationWeight(location: string, city: string): number {
-  return isFringeLocation(location, city) ? 0.9 : 1.0;
+  return isFringeLocation(location, city) ? 0.85 : 1.0;
 } 

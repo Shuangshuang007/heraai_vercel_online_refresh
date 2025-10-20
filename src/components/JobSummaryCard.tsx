@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import type { Job } from '../types/job';
 import { normalizeEmploymentType, parseWorkMode, formatSalaryWithBenefits, normalizeExperienceTag } from '../utils/employmentUtils';
+import { deduplicateJobTitle } from '../utils/titleDeduplicator';
 
 interface JobSummaryCardProps {
   job: Job;
@@ -188,11 +189,19 @@ export function JobSummaryCard({
           {/* 职位标题和公司 */}
           <div className="flex justify-between items-start">
             <div>
-              <h3 className="text-base font-semibold text-gray-900">{job.title}</h3>
+              <h3 className="text-base font-semibold text-gray-900">{deduplicateJobTitle(job.title)}</h3>
               <p className="text-sm text-gray-600">{job.company}</p>
             </div>
             {job.platform === 'CorporateDirect' || job.platform === 'PublicSector' ? (
-              <span className="inline-flex items-center rounded-md bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-500/10">
+              <span 
+                className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-700 relative"
+                style={{
+                  clipPath: 'polygon(0% 0%, 90% 0%, 100% 50%, 90% 100%, 0% 100%, 10% 50%)',
+                  backgroundColor: '#dbeafe',
+                  paddingLeft: '18px',
+                  paddingRight: '16px'
+                }}
+              >
                 {job.platform === 'CorporateDirect' ? 'Corporate Direct' : 'Public Sector'}
               </span>
             ) : null}

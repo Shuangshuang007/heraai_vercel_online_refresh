@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { JobDetailPanel } from './JobDetailPanel';
 import { Job } from '@/types/job';
+import { deduplicateJobTitle } from '../utils/titleDeduplicator';
 
 interface JobListProps {
   jobs: Job[];
@@ -28,7 +29,7 @@ export default function JobList({ jobs, loading = false, error = null }: JobList
               className={`p-4 border rounded-lg cursor-pointer hover:bg-blue-50 ${selectedJob?.id === job.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'}`}
               onClick={() => setSelectedJob(job)}
             >
-              <div className="font-semibold text-gray-900">{job.title}</div>
+              <div className="font-semibold text-gray-900">{deduplicateJobTitle(job.title)}</div>
               <div className="text-sm text-gray-700">{job.company}</div>
               <div className="text-xs text-gray-500">{job.location}</div>
               <div className="text-xs text-gray-500 truncate">{job.description}</div>

@@ -1,5 +1,6 @@
 import { BuildingOffice2Icon, MapPinIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { Button } from './ui/Button';
+import { deduplicateJobTitle } from '../utils/titleDeduplicator';
 
 export interface Job {
   id: string;
@@ -63,7 +64,7 @@ export default function JobDetail({
   <div className="bg-white shadow rounded-lg p-6">
     {/* 职位标题和基本信息 */}
     <div className="mb-6">
-      <h2 className="text-2xl font-bold text-gray-900">{job.title}</h2>
+      <h2 className="text-2xl font-bold text-gray-900">{deduplicateJobTitle(job.title)}</h2>
       <div className="mt-2 flex items-center text-sm text-gray-500">
         <BuildingOffice2Icon className="h-5 w-5 text-gray-400 mr-2" />
         <span>{job.company}</span>

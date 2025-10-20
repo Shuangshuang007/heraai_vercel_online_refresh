@@ -47,7 +47,7 @@ export default function CookieConsent() {
       className="fixed bottom-0 inset-x-0 z-50 bg-white border-t border-gray-200 shadow-md px-6 py-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-sm text-gray-700"
     >
       <div>
-        We use essential cookies to make our site work. With your consent, we may also use non-essential cookies to personalize content, analyze site usage, and improve your experience. Read our{" "}
+        We use essential cookies to make our site work. With your consent, we may also use non-essential cookies to personalise content, analyse site usage, and improve your experience. Read our{" "}
         <a
           href="/privacy"
           className="underline text-blue-600 hover:text-blue-800"

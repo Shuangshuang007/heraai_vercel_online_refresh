@@ -1,8 +1,42 @@
-node_modules
-.env.local
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment files
 .env
-nohup.out
-*.log
-.next
 .env.local
+.env.development.local
+.env.test.local
+.env.production.local
 .env.production
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+
+# Logs
+*.log
+nohup.out
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.temp

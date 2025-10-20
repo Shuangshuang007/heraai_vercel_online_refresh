@@ -3,10 +3,46 @@ import OpenAI from 'openai';
 import { fetchJobs } from '../../../services/jobFetchService';
 import { getLocationWeight } from '../../../utils/greaterAreaMap';
 
+// 内存防抖存储
+const debounceStore = new Map<string, { data: any; timestamp: number }>();
+const DEBOUNCE_EXPIRY = 60 * 1000; // 1分钟防抖
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
   baseURL: 'https://api.openai.com/v1',
 });
+
+// 防抖工具函数
+function getDebounceKey(jobTitle: string, city: string): string {
+  return `${jobTitle}:${city}`.toLowerCase();
+}
+
+function getDebouncedData(jobTitle: string, city: string): any | null {
+  const key = getDebounceKey(jobTitle, city);
+  const cached = debounceStore.get(key);
+  
+  if (cached) {
+    const now = Date.now();
+    if (now - cached.timestamp < DEBOUNCE_EXPIRY) {
+      console.log(`[MirrorJobs] ✓ Using debounced data for ${jobTitle} in ${city} (within 1 minute)`);
+      return cached.data;
+    } else {
+      // 超过1分钟，清除防抖数据
+      debounceStore.delete(key);
+    }
+  }
+  
+  return null;
+}
+
+function setDebouncedData(jobTitle: string, city: string, data: any): void {
+  const key = getDebounceKey(jobTitle, city);
+  debounceStore.set(key, {
+    data,
+    timestamp: Date.now()
+  });
+  console.log(`[MirrorJobs] ✓ Data debounced for ${jobTitle} in ${city} (1 minute)`);
+}
 
 // 定义职位接口
 interface Job {
@@ -168,6 +204,12 @@ export async function GET(request: Request) {
   const page = parseInt(searchParams.get('page') || '1');
   
   try {
+    // 检查防抖数据（1分钟内）
+    const debouncedData = getDebouncedData(jobTitle, city);
+    if (debouncedData) {
+      return NextResponse.json(debouncedData);
+    }
+    
     // 使用统一的job获取服务
     const result = await fetchJobs({
       jobTitle,
@@ -190,7 +232,7 @@ export async function GET(request: Request) {
     
     console.log(`[MirrorJobs] GET: Final stats: ${analyzedJobs.length} jobs, Source: ${result.source}, IsHotJob: ${result.isHotJob}`);
     
-    return NextResponse.json({
+    const responseData = {
       jobs: analyzedJobs,
       total: result.total,
       page: result.page,
@@ -198,7 +240,12 @@ export async function GET(request: Request) {
       source: result.source,
       isHotJob: result.isHotJob,
       analysis: result.analysis
-    });
+    };
+    
+    // 设置防抖数据（1分钟）
+    setDebouncedData(jobTitle, city, responseData);
+    
+    return NextResponse.json(responseData);
     
   } catch (error: any) {
     console.error('[MirrorJobs] GET Error:', error);

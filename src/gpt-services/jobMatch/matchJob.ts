@@ -138,11 +138,11 @@ export async function calculateMatchScore(
     - Current Position: ${userProfile.currentPosition || 'Not specified'}
     
     Please provide:
-    1. 生成四个分数，全部为65-95之间的整数，且每项分数需细致分布（如每1分或2分一个档位）：
-       - Experience Score（65-95）
-       - Industry Score（65-95）
-       - Skills Score（65-90，最高不能超过90）
-       - Other Score（65-95，综合文化契合、亮点等）
+    1. 生成四个分数，全部为50-95之间的整数，且每项分数需细致分布（如每1分或2分一个档位）：
+       - Experience Score（50-95）
+       - Industry Score（50-95）
+       - Skills Score（50-90，最高不能超过90）
+       - Other Score（50-95，综合文化契合、亮点等）
     2. Match Score = 0.3*Experience + 0.35*Skills + 0.2*Industry + 0.15*Other，四舍五入为整数。
        - 如果职位为Corporate Direct，Match Score不变；
        - 否则Match Score乘0.95，最大不超过95。
@@ -156,7 +156,7 @@ Skills: [整数]
 Other: [整数]
 Score: [整数]
 
-    5. A match score between 65-95 based on my profile and the job requirements
+    5. A match score between 50-95 based on my profile and the job requirements
     2. Provide 3-4 structured highlights, each as a single sentence:
        1) State the industry/major business, department or team, and the experience level required (e.g., "A global software company (product team) seeking a senior engineer with 8+ years experience")
        2) Clearly state the core responsibilities using strong action verbs and nouns (e.g., "Lead .NET solution development and modernise legacy platforms", "Develop and maintain React components, ensure UI/UX quality, and collaborate across teams")
@@ -337,7 +337,7 @@ Score: [整数]
   const analysis = analysisMatch ? analysisMatch[1].trim() : '';
   
   return {
-    score: Math.min(Math.max(score, 65), 95),
+    score: Math.min(Math.max(score, 50), 95),
     subScores,
     highlights,
     listSummary,

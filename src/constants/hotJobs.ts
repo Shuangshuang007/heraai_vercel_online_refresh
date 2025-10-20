@@ -91,7 +91,9 @@ export const HOT_JOBS_CONFIG = {
     'Lecturer',
     'Psychologist',
     'Therapist',
-    'Social Worker'
+    'Social Worker',
+    'Graduate Program',
+    'Internship Program'
   ],
   
   // 模糊匹配关键词
@@ -279,7 +281,12 @@ export const HOT_JOBS_CONFIG = {
     'occupational',
     'food',
     'quality',
-    'control'
+    'control',
+    'graduate',
+    'internship',
+    'program',
+    'trainee',
+    'entry'
   ],
   
   // MongoDB查询限制
@@ -304,32 +311,78 @@ import { greaterAreaMap } from '../utils/greaterAreaMap';
 export async function getHotJobsQuery(profile: UserProfile) {
   // 1. 调用GPT推荐服务
   const gptResult = await generateJobPlanFromGPT(profile);
-  const titles = [...gptResult.primaryTitles, ...gptResult.secondaryTitles];
+  
+  // 2. 从localStorage获取原始Profile的jobTitle
+  let originalTitle = '';
+  if (typeof window !== 'undefined') {
+    try {
+      const userProfileStr = localStorage.getItem('userProfile');
+      const originalProfile = userProfileStr ? JSON.parse(userProfileStr) : {};
+      originalTitle = originalProfile.jobTitle?.[0] || profile.targetTitle || '';
+    } catch (error) {
+      console.warn('Failed to get original jobTitle from localStorage:', error);
+      originalTitle = profile.targetTitle || '';
+    }
+  } else {
+    originalTitle = profile.targetTitle || '';
+  }
+  
+  // 3. 组合所有titles：原始title + GPT生成的titles
+  const gptTitles = [...gptResult.primaryTitles, ...gptResult.secondaryTitles];
+  const allTitles = originalTitle ? [originalTitle, ...gptTitles] : gptTitles;
+  
   const city = profile.city;
 
-  // 2. 构建扩展搜索组合
+  // 4. 构建扩展搜索组合
   const locationList = greaterAreaMap[city] 
     ? [...greaterAreaMap[city].core, ...greaterAreaMap[city].fringe]
     : [city];
   
   // 构建搜索组合：每个职位标题 × 每个位置
-  const searchPairs = titles.flatMap(title =>
+  const searchPairs = allTitles.flatMap(title =>
     locationList.map(loc => ({
       title,
       location: loc
     }))
   );
 
-  // 3. 构建并执行MongoDB查询（使用扩展位置查询）
-  const jobs = await buildAndExecuteQuery(titles, city);
+  // 5. 构建并执行MongoDB查询（使用所有titles）
+  const jobs = await buildAndExecuteQuery(allTitles, city);
 
-  // 4. 返回结果和GPT推荐摘要
+  // 6. 根据title优先级调整matchScore
+  const adjustedJobs = jobs.map(job => {
+    let adjustedScore = job.matchScore || 75;
+    
+    // 检查是否匹配原始title（不扣分）
+    if (originalTitle && job.title.toLowerCase().includes(originalTitle.toLowerCase())) {
+      // 保持原分数，不扣分
+    }
+    // 检查是否匹配primary titles（-3分）
+    else if (gptResult.primaryTitles.some(title => 
+      job.title.toLowerCase().includes(title.toLowerCase())
+    )) {
+      adjustedScore = Math.max(adjustedScore - 3, 50); // 最低50分
+    }
+    // 检查是否匹配secondary titles（-5分）
+    else if (gptResult.secondaryTitles.some(title => 
+      job.title.toLowerCase().includes(title.toLowerCase())
+    )) {
+      adjustedScore = Math.max(adjustedScore - 5, 50); // 最低50分
+    }
+    
+    return {
+      ...job,
+      matchScore: adjustedScore
+    };
+  });
+
+  // 7. 返回调整后的结果和GPT推荐摘要
   return {
-    jobs,
+    jobs: adjustedJobs, // 返回调整分数后的jobs
     summary: gptResult.summarySentences,
     reasoning: gptResult.reasoning,
     searchStrategy: gptResult.searchStrategy,
-    searchPairs // 新增：返回搜索组合信息
+    searchPairs
   };
 }
 

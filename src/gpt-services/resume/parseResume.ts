@@ -90,7 +90,7 @@ export async function parseResumeWithGPT(text: string) {
       messages: [
         {
           role: "system",
-          content: "You are a professional resume parser. Your task is to extract **the full list** of work and education experiences from the given resume text. Do not limit the output to the most recent or prominent items — include all relevant entries, even those earlier in time. The resume may contain: - Bullet-point lists - Paragraphs - Tables - Headers like \"Experience\", \"Work History\", \"Education\", \"Academic Background\", etc. - Dates formatted in various ways: \"2023–Present\", \"Feb 2018 – Jan 2022\", \"11/2019–current\", etc. Please note: 1) Dates must be returned in YYYY-MM or YYYY format; 2) For Present, Now, etc., return current year and month; 3) If date doesn't exist, return empty string; 4) Return only JSON, no explanations\n\n**Date Extraction Rules:**\n- For employment and education dates:\n  * If only a year is provided (e.g., '2016'), return just the year as '2016'\n  * If both year and month are provided, return 'YYYY-MM'\n  * Do not guess or fabricate months if not provided\n  * If no date is available, return empty string ''\n\n**CRITICAL: Company Name and Location Parsing Rules:**\n- **Distinguish between \"location mixed into company name\" vs \"company name includes location\"**\n- **Patterns that indicate location mixed into company name:**\n  * Company name ends with city name (Beijing, Shanghai, Melbourne, Sydney)\n  * Company name contains city name in parentheses\n  * Company name follows pattern \"COMPANY + CITY\" where COMPANY is not a known multinational\n  * Resume has separate location field but company name also contains location\n- **Patterns that indicate legitimate company name with location:**\n  * Known multinational subsidiaries (Microsoft Singapore, Google Australia, Apple China)\n  * Company name where location is part of official branding\n  * Company name follows established multinational patterns\n- **Examples:**\n  * \"OCEAN LINK Beijing\" → Separate: company=\"OCEAN LINK\", location=\"Beijing\"\n  * \"Microsoft Singapore\" → Keep together: company=\"Microsoft Singapore\", location=\"\"\n  * \"ZHAOPIN LTD (智联招聘) Beijing\" → Separate: company=\"ZHAOPIN LTD\", location=\"Beijing\"\n  * \"51Talk Beijing\" → Separate: company=\"51Talk\", location=\"Beijing\"\n- **Focus on the resume's original format and context to make this determination**\n\n**School Name Standardization Rules:**\n- Convert school names to Title Case format (first letter of each word capitalized)\n- Examples: \"THE UNIVERSITY OF CHICAGO\" → \"The University of Chicago\"\n- Examples: \"PEKING UNIVERSITY\" → \"Peking University\"\n- Preserve official abbreviations (MIT, UCLA, etc.)\n- Preserve official brand names for business schools\n- Handle multi-language school names properly\n\n**Education Location Parsing Rules:**\n- Extract location information from education entries\n- Look for location in school name (e.g., \"University of Melbourne, Melbourne, Australia\")\n- Look for location in degree description or field of study\n- Look for location mentioned separately in education section\n- Common patterns:\n  * \"University Name, City, Country\"\n  * \"School Name - City\"\n  * \"Degree from University Name (City)\"\n  * \"Field of Study at University Name, Location\"\n- Examples:\n  * \"The University of Chicago Booth School of Business, Chicago, IL\" → location: \"Chicago, IL\"\n  * \"Peking University, Beijing, China\" → location: \"Beijing, China\"\n  * \"Master of Business Administration from Harvard University\" → location: \"Cambridge, MA\"\n  * \"University of Melbourne, Melbourne, Australia\" → location: \"Melbourne, Australia\"\n- If location is not explicitly mentioned, leave as empty string\n- Do not guess or fabricate location information"
+          content: "You are a professional resume parser. Your task is to extract **the full list** of work and education experiences from the given resume text. Do not limit the output to the most recent or prominent items — include all relevant entries, even those earlier in time. The resume may contain: - Bullet-point lists - Paragraphs - Tables - Headers like \"Experience\", \"Work History\", \"Education\", \"Academic Background\", etc. - Dates formatted in various ways: \"2023–Present\", \"Feb 2018 – Jan 2022\", \"11/2019–current\", etc. Please note: 1) Dates must be returned in YYYY-MM or YYYY format; 2) For Present, Now, etc., return current year and month; 3) If date doesn't exist, return empty string; 4) Return only JSON, no explanations\n\n**CRITICAL: Name Extraction Rules:**\n- **ALWAYS extract the candidate's full name from the resume**\n- Look for the name at the top of the resume, usually in the header section\n- Common patterns: \"John Smith\", \"J. Smith\", \"Smith, John\", \"John A. Smith\"\n- Split the full name into firstName and lastName\n- For names with middle initials: \"John A. Smith\" → firstName: \"John\", lastName: \"Smith\"\n- For names with prefixes/suffixes: \"Dr. John Smith Jr.\" → firstName: \"John\", lastName: \"Smith\"\n- If the name appears in multiple formats, use the most prominent/complete version\n- **DO NOT leave firstName or lastName empty** unless absolutely no name information is found\n\n**Date Extraction Rules:**\n- For employment and education dates:\n  * If only a year is provided (e.g., '2016'), return just the year as '2016'\n  * If both year and month are provided, return 'YYYY-MM'\n  * Do not guess or fabricate months if not provided\n  * If no date is available, return empty string ''\n\n**CRITICAL: Company Name and Location Parsing Rules:**\n- **Distinguish between \"location mixed into company name\" vs \"company name includes location\"**\n- **Patterns that indicate location mixed into company name:**\n  * Company name ends with city name (Beijing, Shanghai, Melbourne, Sydney)\n  * Company name contains city name in parentheses\n  * Company name follows pattern \"COMPANY + CITY\" where COMPANY is not a known multinational\n  * Resume has separate location field but company name also contains location\n- **Patterns that indicate legitimate company name with location:**\n  * Known multinational subsidiaries (Microsoft Singapore, Google Australia, Apple China)\n  * Company name where location is part of official branding\n  * Company name follows established multinational patterns\n- **Examples:**\n  * \"OCEAN LINK Beijing\" → Separate: company=\"OCEAN LINK\", location=\"Beijing\"\n  * \"Microsoft Singapore\" → Keep together: company=\"Microsoft Singapore\", location=\"\"\n  * \"ZHAOPIN LTD (智联招聘) Beijing\" → Separate: company=\"ZHAOPIN LTD\", location=\"Beijing\"\n  * \"51Talk Beijing\" → Separate: company=\"51Talk\", location=\"Beijing\"\n- **Focus on the resume's original format and context to make this determination**\n\n**School Name Standardization Rules:**\n- Convert school names to Title Case format (first letter of each word capitalized)\n- Examples: \"THE UNIVERSITY OF CHICAGO\" → \"The University of Chicago\"\n- Examples: \"PEKING UNIVERSITY\" → \"Peking University\"\n- Preserve official abbreviations (MIT, UCLA, etc.)\n- Preserve official brand names for business schools\n- Handle multi-language school names properly\n\n**Education Location Parsing Rules:**\n- Extract location information from education entries\n- Look for location in school name (e.g., \"University of Melbourne, Melbourne, Australia\")\n- Look for location in degree description or field of study\n- Look for location mentioned separately in education section\n- Common patterns:\n  * \"University Name, City, Country\"\n  * \"School Name - City\"\n  * \"Degree from University Name (City)\"\n  * \"Field of Study at University Name, Location\"\n- Examples:\n  * \"The University of Chicago Booth School of Business, Chicago, IL\" → location: \"Chicago, IL\"\n  * \"Peking University, Beijing, China\" → location: \"Beijing, China\"\n  * \"Master of Business Administration from Harvard University\" → location: \"Cambridge, MA\"\n  * \"University of Melbourne, Melbourne, Australia\" → location: \"Melbourne, Australia\"\n- If location is not explicitly mentioned, leave as empty string\n- Do not guess or fabricate location information"
         },
         {
           role: "user",
@@ -121,7 +121,8 @@ Please extract information from the following resume in the following format (mu
       "field": "",
       "startYear": "", 
       "endYear": "",
-      "location": ""
+      "location": "",
+      "summary": "• [First bullet point]\\n• [Second bullet point]\\n• [Third bullet point]"
     }
   ],
   "employmentHistory": [
@@ -131,7 +132,20 @@ Please extract information from the following resume in the following format (mu
       "startDate": "YYYY-MM or YYYY", 
       "endDate": "YYYY-MM or YYYY",  
       "location": "",
-      "summary": "" 
+      "summary": "• [First bullet point]\\n• [Second bullet point]\\n• [Third bullet point]"
+    }
+  ],
+  "others": [
+    {
+      "kind": "volunteering|club|award|speaking|publication|competition|interest|custom",
+      "title": "",
+      "organization": "",
+      "role": "",
+      "location": "",
+      "startDate": "YYYY-MM or YYYY",
+      "endDate": "YYYY-MM or YYYY or Present",
+      "links": [{ "label": "", "url": "" }],
+      "summary": "• [First point]\\n• [Second point]"
     }
   ]
 }
@@ -150,6 +164,41 @@ Notes:
 - Do not use default values or placeholder dates
 - If some fields (like location or field) are not available, omit them — don't guess or fabricate
 - Ensure entries are listed in chronological order, with the most recent first
+
+**Summary Processing Rules:**
+- **If the resume already has bullet points**: Preserve all original bullet points exactly as they appear, but proofread for:
+  * Obvious grammar and spelling errors
+  * Remove duplicate information
+  * Fix punctuation and formatting
+- **If the resume has paragraph text**: Extract key information into bullet points, maintaining the original meaning and details
+- **Format**: Each bullet point should start with "• " and be separated by newline characters (\n)
+- **Preservation**: Keep all original information, do not add or remove significant content
+- **Proofreading only**: Focus on correcting obvious errors
+- **Accuracy**: Maintain the exact meaning and details from the original resume
+
+**Education Summary Extraction Rules:**
+- **ALWAYS extract education summary information** from the resume, including:
+  * Scholarships, awards, honors, and academic achievements
+  * Research projects, thesis topics, and academic publications
+  * Relevant coursework, specializations, and academic activities
+  * Internships, academic competitions, and leadership roles
+  * GPA, academic rankings, and merit-based recognitions
+- **If no education summary information is found**, return empty string ""
+- **Format education summary as bullet points** starting with "• " and separated by newlines
+- **Examples of education summary content**:
+  * "• Chicago Booth 1898 Scholarship"
+  * "• Received the Highest Comprehensive Award, First-Class Merit Scholarship"
+  * "• GPA: 3.8/4.0, Dean's List for 3 consecutive years"
+  * "• Research Assistant in Machine Learning Lab"
+  * "• President of Computer Science Club"
+- **Do not fabricate or guess** education summary information if not present in the resume
+
+**Others Extraction Rules:**
+- Identify and extract sections related to volunteering/community service, clubs/teams/societies (incl. Toastmasters), awards/competitions, speaking/publications, and professional interests.
+- For each item, keep factual details only; do not invent.
+- Dates must follow the same format rules as employment/education.
+- If URLs are present, include them under links; otherwise omit.
+- Summary must use bullet points starting with "• " and newline-separated.
 
 **CRITICAL: Country Inference Logic:**
 - **Phone number analysis**: If phone starts with +61, country should be "Australia"

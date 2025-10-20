@@ -19,10 +19,18 @@ export default function FooterSection() {
                 <span>shuang@heraai.net.au</span>
               </div>
               <div className="flex space-x-4 pt-4">
-                <img src="/linkedin.svg" alt="LinkedIn" className="w-5 h-5 cursor-pointer" />
-                <img src="/facebook.svg" alt="Facebook" className="w-5 h-5 cursor-pointer" />
-                <img src="/tiktok.svg" alt="TikTok" className="w-5 h-5 cursor-pointer" />
-                <img src="/xiaohongshu.svg" alt="Xiaohongshu" className="w-7 h-7 cursor-pointer" />
+                <a href="https://www.linkedin.com/company/106766019/" target="_blank" rel="noopener noreferrer">
+                  <img src="/linkedin.svg" alt="LinkedIn" className="w-5 h-5 cursor-pointer hover:opacity-80 transition-opacity" />
+                </a>
+                <a href="https://www.facebook.com/profile.php?id=61578741927564" target="_blank" rel="noopener noreferrer">
+                  <img src="/facebook.svg" alt="Facebook" className="w-5 h-5 cursor-pointer hover:opacity-80 transition-opacity" />
+                </a>
+                <a href="https://www.tiktok.com/@shuangwithheraai" target="_blank" rel="noopener noreferrer">
+                  <img src="/tiktok.svg" alt="TikTok" className="w-5 h-5 cursor-pointer hover:opacity-80 transition-opacity" />
+                </a>
+                <a href="https://www.xiaohongshu.com/user/profile/567fd096b8ce1a3eac69921d" target="_blank" rel="noopener noreferrer">
+                  <img src="/xiaohongshu.svg" alt="Xiaohongshu" className="w-7 h-7 cursor-pointer hover:opacity-80 transition-opacity" />
+                </a>
               </div>
             </div>
           </div>

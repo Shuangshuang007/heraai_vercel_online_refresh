@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Job } from '@/types/job';
+import { deduplicateJobTitle } from '../utils/titleDeduplicator';
 
 interface LinkedInAutoApplyProps {
   job: Job;
@@ -22,7 +23,7 @@ const handleLinkedInAutoApply = async (job: Job) => {
   // 2. 显示申请提示
   return new Promise((resolve) => {
     setTimeout(() => {
-      alert(`准备申请职位：${job.title}\n\n公司：${job.company}\n地点：${job.location}\n\n请在新打开的标签页中完成申请流程。`);
+      alert(`准备申请职位：${deduplicateJobTitle(job.title)}\n\n公司：${job.company}\n地点：${job.location}\n\n请在新打开的标签页中完成申请流程。`);
       resolve(true);
     }, 1000);
   });
@@ -67,7 +68,7 @@ export const LinkedInAutoApply: React.FC<LinkedInAutoApplyProps> = ({
       
       <div className="mt-2 text-sm text-gray-600">
         <a 
-          href={buildLinkedInSearchUrl(job.title, job.location)}
+          href={buildLinkedInSearchUrl(deduplicateJobTitle(job.title), job.location)}
           target="_blank"
           rel="noopener noreferrer"
           className="text-blue-600 hover:underline"

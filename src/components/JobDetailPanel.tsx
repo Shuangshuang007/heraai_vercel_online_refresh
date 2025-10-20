@@ -2,6 +2,7 @@ import React from 'react';
 import { Job } from '@/types/job';
 import { LinkedInAutoApply } from '@/components/LinkedInAutoApply';
 import { buildSearchUrl } from '@/utils/platformMapping';
+import { deduplicateJobTitle } from '@/utils/titleDeduplicator';
 
 interface JobDetailPanelProps {
   job: Job | null;
@@ -47,7 +48,7 @@ export function JobDetailPanel({ job, language, compact }: JobDetailPanelProps) 
     <div className={`h-full bg-white rounded-lg border border-gray-200 overflow-y-auto ${compact ? 'p-2' : 'p-6'}`} style={compact ? { fontSize: '14px', lineHeight: '1.4' } : {}}>
       <div className={compact ? 'mb-2' : 'mb-4'}>
         <div className="flex justify-between items-center">
-          <h2 className={`font-bold text-gray-900 dark:text-white ${compact ? 'text-base' : 'text-2xl'}`}>{job.title}</h2>
+          <h2 className={`font-bold text-gray-900 dark:text-white ${compact ? 'text-base' : 'text-2xl'}`}>{deduplicateJobTitle(job.title)}</h2>
           {job.url ? (
             <a
               href={job.url}

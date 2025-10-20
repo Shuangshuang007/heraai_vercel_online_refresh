@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     // 目前使用模拟转换，实际部署时需要集成真实的转换服务
     const convertedBuffer = await simulateFileConversion(file, from, to);
 
-    return new NextResponse(convertedBuffer as BodyInit, {
+    return new NextResponse(convertedBuffer as any, {
       headers: {
         'Content-Type': getContentType(to),
         'Content-Disposition': `attachment; filename="${file.name.replace(`.${from}`, `.${to}`)}"`

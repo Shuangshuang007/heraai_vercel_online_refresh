@@ -87,3 +87,6 @@ export async function getUserProfile(email: string): Promise<UserProfile | null>
 1. 现有 MCP 功能将正常工作
 2. AgentKit v2 功能保持独立运行
 3. 服务器启动问题将解决
+
+
+

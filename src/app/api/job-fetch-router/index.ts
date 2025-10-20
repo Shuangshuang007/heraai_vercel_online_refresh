@@ -91,7 +91,7 @@ async function queryAllPlatforms(jobTitle: string, city: string, limit: string) 
 async function querySpecificPlatform(platform: string, jobTitle: string, city: string, limit: string) {
   const platformUrl = `/api/job-fetch-router/${platform}?jobTitle=${encodeURIComponent(jobTitle)}&city=${encodeURIComponent(city)}&limit=${limit}`;
   
-  const response = await fetch(`${process.env.NODE_ENV === 'production' ? process.env.VERCEL_URL : 'http://localhost:3002'}${platformUrl}`);
+  const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3002'}${platformUrl}`);
   
   if (!response.ok) {
     throw new Error(`${platform} API error: ${response.statusText}`);

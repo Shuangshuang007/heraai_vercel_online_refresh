@@ -100,3 +100,6 @@ curl -X POST "https://your-app.vercel.app/api/mcp" \
 **如果想测试但不部署**：
 - 本地运行 `./scripts/agentkit/quick_test_setup.sh`
 - 或者直接修改代码中的环境变量检查逻辑
+
+
+
