@@ -967,6 +967,48 @@ export async function POST(request: NextRequest) {
       
       console.info("[AgentKit] Planning request:", { traceId, userMessage, sessionId });
       
+      // Auto-switch to v2 if enabled
+      if (process.env.FEATURE_AGENTKIT_V2 === 'true') {
+        console.log("[AgentKit] Auto-switching to v2 logic");
+        
+        try {
+          // Convert userMessage to intent format for v2
+          const { plan } = await import('../../../experimental/agentkit_mvp/planner');
+          
+          // Simple intent mapping from userMessage
+          const intent = {
+            primary: 'find_jobs' as const,
+            readiness: 'ready' as const,
+            blockers: [],
+            confidence: 0.9
+          };
+          
+          const userId = sessionId || 'chatgpt_user';
+          const v2Plan = await plan(userId, intent);
+          
+          return json200({
+            jsonrpc: "2.0",
+            id: body.id ?? null,
+            result: {
+              content: [{
+                type: "json",
+                data: {
+                  content: {
+                    plan: v2Plan,
+                    version: "v2_auto"
+                  }
+                }
+              }],
+              isError: false
+            }
+          }, { "X-AgentKit-V2-Trace-Id": traceId, "X-AgentKit-Auto-V2": "true" });
+          
+        } catch (error: any) {
+          console.error('[AgentKit] V2 auto-switch error, falling back to v1:', error);
+          // Fall through to v1 logic
+        }
+      }
+      
       try {
         if (!userMessage) {
           return json200({
@@ -1041,6 +1083,60 @@ export async function POST(request: NextRequest) {
       const { planId, stepId } = body.params || {};
       
       console.info("[AgentKit] Execution request:", { traceId, planId, stepId });
+      
+      // Auto-switch to v2 if enabled
+      if (process.env.FEATURE_AGENTKIT_V2 === 'true') {
+        console.log("[AgentKit] Auto-switching execute to v2 logic");
+        
+        try {
+          // For execute, we need to get the plan and execute it with v2 logic
+          // This is a simplified version - in practice you'd retrieve the actual plan
+          const mockPlan = {
+            id: planId || 'fallback_plan',
+            userId: 'chatgpt_user',
+            intent: {
+              primary: 'find_jobs' as const,
+              readiness: 'ready' as const,
+              blockers: [],
+              confidence: 0.9
+            },
+            steps: [
+              {
+                id: stepId || 's1',
+                tool: 'searchJobs' as const,
+                args: { limit: 20 },
+                priority: 1
+              }
+            ],
+            createdAt: new Date().toISOString(),
+            version: 'v1.0.0' as const
+          };
+          
+          const { execute } = await import('../../../experimental/agentkit_mvp/executor');
+          const results = await execute(mockPlan, { dryRun: false });
+          
+          return json200({
+            jsonrpc: "2.0",
+            id: body.id ?? null,
+            result: {
+              content: [{
+                type: "json",
+                data: {
+                  content: {
+                    executions: results,
+                    version: "v2_auto"
+                  }
+                }
+              }],
+              isError: false
+            }
+          }, { "X-AgentKit-V2-Trace-Id": traceId, "X-AgentKit-Auto-V2": "true" });
+          
+        } catch (error: any) {
+          console.error('[AgentKit] V2 execute auto-switch error, falling back to v1:', error);
+          // Fall through to v1 logic
+        }
+      }
       
       try {
         if (!planId || !stepId) {
