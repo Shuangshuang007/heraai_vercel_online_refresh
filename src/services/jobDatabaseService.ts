@@ -181,11 +181,7 @@ export function transformMongoDBJobToFrontendFormat(mongoJob: any): any | null {
 // 连接MongoDB
 export async function connectToMongoDB() {
   if (!client) {
-    client = new MongoClient(MONGODB_URI, {
-      serverSelectionTimeoutMS: 15000, // 15秒服务器选择超时
-      connectTimeoutMS: 15000, // 15秒连接超时
-      socketTimeoutMS: 20000, // 20秒socket超时
-    });
+    client = new MongoClient(MONGODB_URI);
     await client.connect();
     db = client.db(DB_NAME);
   }

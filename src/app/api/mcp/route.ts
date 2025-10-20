@@ -18,6 +18,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { fetchJobs } from '../../../services/jobFetchService';
 import { getUserProfile } from '../../../services/profileDatabaseService';
 import { connectToMongoDB, transformMongoDBJobToFrontendFormat } from '../../../services/jobDatabaseService';
+import { parseMessageWithGPT } from '../../../gpt-services/assistant/parseMessage';
+import { AgentKitPlanner } from '../../../lib/agentkit/planner';
+import { AgentKitExecutor } from '../../../lib/agentkit/executor';
+import { AgentKitMemory } from '../../../lib/agentkit/memory';
 import {
   deduplicateJobs,
   enhanceJobsWithSources,
@@ -952,6 +956,147 @@ export async function POST(request: NextRequest) {
         id: body.id ?? null, 
         result: { tools: rpcTools } 
       });
+    }
+
+    // ============================================
+    // AgentKit Integration - Planning & Execution
+    // ============================================
+    if (body.method === "agentkit/plan") {
+      const traceId = crypto.randomUUID();
+      const { userMessage, sessionId, userContext } = body.params || {};
+      
+      console.info("[AgentKit] Planning request:", { traceId, userMessage, sessionId });
+      
+      try {
+        if (!userMessage) {
+          return json200({
+            jsonrpc: "2.0",
+            id: body.id ?? null,
+            result: {
+              content: [{
+                type: "json",
+                data: {
+                  content: {
+                    error: "userMessage is required",
+                    planId: null
+                  }
+                }
+              }],
+              isError: false
+            }
+          }, { "X-AgentKit-Trace-Id": traceId });
+        }
+
+        // Use AgentKit Planner to generate plan
+        const planner = new AgentKitPlanner();
+        const memory = new AgentKitMemory();
+        
+        // Store conversation context in memory
+        if (userContext?.history) {
+          await memory.storeConversationHistory(sessionId || traceId, userContext.history);
+        }
+
+        // Generate execution plan
+        const plan = await planner.generatePlan(userMessage, sessionId || traceId, userContext);
+        
+        // Store the plan
+        const executor = new AgentKitExecutor();
+        await executor.storePlan(plan);
+        
+        return json200({
+          jsonrpc: "2.0",
+          id: body.id ?? null,
+          result: {
+            content: [{
+              type: "json",
+              data: { content: plan }
+            }],
+            isError: false
+          }
+        }, { "X-AgentKit-Trace-Id": traceId });
+        
+      } catch (error: any) {
+        console.error('[AgentKit] Planning error:', error);
+        return json200({
+          jsonrpc: "2.0",
+          id: body.id ?? null,
+          result: {
+            content: [{
+              type: "json", 
+              data: {
+                content: {
+                  error: error.message || 'Planning failed',
+                  planId: null
+                }
+              }
+            }],
+            isError: false
+          }
+        }, { "X-AgentKit-Trace-Id": traceId });
+      }
+    }
+
+    if (body.method === "agentkit/execute") {
+      const traceId = crypto.randomUUID();
+      const { planId, stepId } = body.params || {};
+      
+      console.info("[AgentKit] Execution request:", { traceId, planId, stepId });
+      
+      try {
+        if (!planId || !stepId) {
+          return json200({
+            jsonrpc: "2.0",
+            id: body.id ?? null,
+            result: {
+              content: [{
+                type: "json",
+                data: {
+                  content: {
+                    error: "planId and stepId are required",
+                    result: null
+                  }
+                }
+              }],
+              isError: false
+            }
+          }, { "X-AgentKit-Trace-Id": traceId });
+        }
+
+        // Execute AgentKit plan step using new executor
+        const executor = new AgentKitExecutor();
+        const result = await executor.executeStep(planId, stepId);
+        
+        return json200({
+          jsonrpc: "2.0",
+          id: body.id ?? null,
+          result: {
+            content: [{
+              type: "json",
+              data: { content: result }
+            }],
+            isError: false
+          }
+        }, { "X-AgentKit-Trace-Id": traceId });
+        
+      } catch (error: any) {
+        console.error('[AgentKit] Execution error:', error);
+        return json200({
+          jsonrpc: "2.0",
+          id: body.id ?? null,
+          result: {
+            content: [{
+              type: "json",
+              data: {
+                content: {
+                  error: error.message || 'Execution failed',
+                  result: null
+                }
+              }
+            }],
+            isError: false
+          }
+        }, { "X-AgentKit-Trace-Id": traceId });
+      }
     }
 
     // ============================================
@@ -2017,3 +2162,4 @@ export async function POST(request: NextRequest) {
     }, { "X-MCP-Trace-Id": traceId });
   }
 }
+
