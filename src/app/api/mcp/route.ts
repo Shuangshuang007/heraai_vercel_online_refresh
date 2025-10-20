@@ -16,9 +16,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchJobs } from '../../../services/jobFetchService';
-import { getUserProfile } from '../../../services/profileDatabaseService';
+import { getUserProfile, upsertJobApplication } from '../../../services/profileDatabaseService';
 import { connectToMongoDB, transformMongoDBJobToFrontendFormat } from '../../../services/jobDatabaseService';
 import { parseMessageWithGPT } from '../../../gpt-services/assistant/parseMessage';
+import { tailorResumeWithGPT } from '../../../gpt-services/resume/tailorResume';
 import { AgentKitPlanner } from '../../../lib/agentkit/planner';
 import { AgentKitExecutor } from '../../../lib/agentkit/executor';
 import { AgentKitMemory } from '../../../lib/agentkit/memory';
@@ -948,6 +949,70 @@ export async function POST(request: NextRequest) {
             },
             required: ["user_email"],
           },
+        },
+        {
+          name: "tailor_resume",
+          description: "📝 TAILOR RESUME TO JOB DESCRIPTION - Customize resume for specific positions!\n\n✅ ALWAYS use this tool when user:\n• Says 'tailor resume', 'customize resume', 'adapt resume for this job'\n• Provides a job description and wants their resume customized\n• Mentions 'make my resume fit this job' or similar requests\n• Wants to optimize resume for a specific position\n\n🎯 This tool performs intelligent resume customization by:\n• Analyzing the target job description and requirements\n• Identifying relevant user experiences and skills\n• Reordering and emphasizing matching qualifications\n• Adding relevant keywords naturally\n• Maintaining authenticity while optimizing for ATS systems\n\n📝 Examples:\n• 'Help me tailor my resume for this software engineer position' → Uses provided JD\n• 'Customize my resume to match this job posting' → Analyzes and adapts\n• 'Make my resume more relevant for this role' → Optimizes for specific position\n\n⚠️ Requires job description or job_id to work effectively",
+          inputSchema: {
+            type: "object",
+            properties: {
+              user_profile: {
+                type: "object",
+                description: "User profile information",
+                properties: {
+                  skills: { type: "array", items: { type: "string" } },
+                  jobTitles: { type: "array", items: { type: "string" } },
+                  employmentHistory: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        company: { type: "string" },
+                        position: { type: "string" },
+                        startDate: { type: "string" },
+                        endDate: { type: "string" },
+                        summary: { type: "string" }
+                      }
+                    }
+                  }
+                },
+                required: []
+              },
+              job_id: {
+                type: "string",
+                description: "Target job ID (if available from job search results)"
+              },
+              job_description: {
+                type: "string",
+                description: "Job description text to tailor resume for"
+              },
+              job_title: {
+                type: "string",
+                description: "Target job title"
+              },
+              company: {
+                type: "string", 
+                description: "Target company name"
+              },
+              resume_content: {
+                type: "string",
+                description: "Current resume content to customize"
+              },
+              customization_level: {
+                type: "string",
+                enum: ["minimal", "moderate", "comprehensive"],
+                default: "moderate",
+                description: "Level of customization to apply"
+              },
+              user_email: {
+                type: "string",
+                format: "email",
+                description: "User email for saving tailored resume"
+              }
+            },
+            required: ["user_profile", "resume_content"],
+            additionalProperties: false
+          }
         },
       ];
       
@@ -2527,6 +2592,147 @@ export async function POST(request: NextRequest) {
                 content: [{
                   type: "text",
                   text: `Failed to get job recommendations: ${error.message}`
+                }],
+                isError: false
+              }
+            }, { "X-MCP-Trace-Id": traceId });
+          }
+        }
+
+        // ============================================
+        // Tool: tailor_resume
+        // ============================================
+        else if (name === "tailor_resume") {
+          const {
+            user_profile = {},
+            job_id,
+            job_description,
+            job_title,
+            company,
+            resume_content,
+            customization_level = 'moderate',
+            user_email
+          } = args;
+
+          console.log('[MCP] tailor_resume - Input args:', { 
+            job_id, 
+            job_title, 
+            company, 
+            customization_level,
+            has_resume_content: !!resume_content,
+            has_user_profile: !!user_profile
+          });
+
+          try {
+            let targetJobInfo = {
+              title: job_title || 'Position',
+              company: company || 'Company',
+              description: job_description || ''
+            };
+
+            // 如果提供了job_id，尝试从数据库获取完整职位信息
+            if (job_id) {
+              try {
+                const { db } = await connectToMongoDB();
+                const collection = db.collection('hera_jobs.jobs');
+                const job = await collection.findOne({ id: job_id });
+                
+                if (job) {
+                  targetJobInfo = {
+                    title: job.title || job_title || 'Position',
+                    company: job.company || job.organisation || company || 'Company',
+                    description: job.description || job.summary || job_description || ''
+                  };
+                  console.log('[MCP] Retrieved job info from database:', targetJobInfo.title);
+                }
+              } catch (dbError) {
+                console.warn('[MCP] Failed to retrieve job from database, using provided info:', dbError);
+              }
+            }
+
+            if (!targetJobInfo.description) {
+              return json200({
+                jsonrpc: "2.0",
+                id: body.id ?? null,
+                result: {
+                  content: [{
+                    type: "text",
+                    text: "Error: Job description is required to tailor the resume. Please provide either job_id or job_description parameter."
+                  }],
+                  isError: false
+                }
+              }, { "X-MCP-Trace-Id": traceId });
+            }
+
+            // 调用GPT服务定制简历
+            console.log('[MCP] Calling GPT service to tailor resume...');
+            const tailorResult = await tailorResumeWithGPT({
+              userProfile: user_profile,
+              jobDescription: targetJobInfo.description,
+              jobTitle: targetJobInfo.title,
+              company: targetJobInfo.company,
+              resumeContent: resume_content,
+              customizationLevel: customization_level
+            });
+
+            // 如果提供了user_email和job_id，保存到数据库
+            if (user_email && job_id && tailorResult.tailoredResume) {
+              try {
+                // 这里需要将tailoredResume保存到GridFS，然后获取URL
+                // 为了简化，暂时使用mock数据，实际实现需要GridFS集成
+                const resumeTailorData = {
+                  gridfsId: `tailored_${job_id}_${Date.now()}`,
+                  downloadUrl: `#resume_content:${encodeURIComponent(tailorResult.tailoredResume)}`,
+                  filename: `tailored_resume_${targetJobInfo.title.replace(/\s+/g, '_')}.txt`
+                };
+
+                await upsertJobApplication(user_email, job_id, {
+                  resumeTailor: resumeTailorData
+                });
+                
+                console.log('[MCP] Saved tailored resume to user profile');
+              } catch (saveError) {
+                console.warn('[MCP] Failed to save tailored resume to profile:', saveError);
+              }
+            }
+
+            // 格式化返回结果
+            const responseText = 
+              `# 📝 Resume Tailored Successfully\n\n` +
+              `**Target Position:** ${targetJobInfo.title} at ${targetJobInfo.company}\n\n` +
+              `**Customization Level:** ${customization_level}\n\n` +
+              `## Key Changes Made:\n${tailorResult.keyChanges.map(change => `• ${change}`).join('\n')}\n\n` +
+              `## Summary:\n${tailorResult.summary}\n\n` +
+              `## Additional Recommendations:\n${tailorResult.recommendations.map(rec => `• ${rec}`).join('\n')}\n\n` +
+              `## Tailored Resume:\n\`\`\`\n${tailorResult.tailoredResume}\n\`\`\`\n\n` +
+              `*Resume has been customized to match the job requirements while maintaining authenticity.*`;
+
+            return json200({
+              jsonrpc: "2.0",
+              id: body.id ?? null,
+              result: {
+                content: [{
+                  type: "text",
+                  text: responseText
+                }],
+                isError: false,
+                tailoredResume: tailorResult.tailoredResume,
+                keyChanges: tailorResult.keyChanges,
+                summary: tailorResult.summary,
+                recommendations: tailorResult.recommendations,
+                jobInfo: targetJobInfo
+              }
+            }, { "X-MCP-Trace-Id": traceId });
+
+          } catch (error: any) {
+            console.error('[MCP] tailor_resume error:', error);
+            return json200({
+              jsonrpc: "2.0",
+              id: body.id ?? null,
+              result: {
+                content: [{
+                  type: "text",
+                  text: `Failed to tailor resume: ${error.message}`
                 }],
                 isError: false
               }
