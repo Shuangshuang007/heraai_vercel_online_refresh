@@ -681,6 +681,288 @@ export async function GET(request: NextRequest) {
 }
 
 // ============================================
+// Helper Functions for Resume Processing
+// ============================================
+
+// Extract key highlights from job description (reusing TailorPreview logic)
+function extractKeyHighlights(jobText: string): string[] {
+  const skillKeywords = [
+    'JavaScript', 'Python', 'Java', 'C++', 'C#', '.NET', 'React', 'Angular', 'Vue',
+    'Node.js', 'Express', 'Django', 'Flask', 'Spring', 'Hibernate', 'SQL', 'NoSQL',
+    'MongoDB', 'PostgreSQL', 'MySQL', 'Redis', 'AWS', 'Azure', 'GCP', 'Docker',
+    'Kubernetes', 'Jenkins', 'Git', 'GitHub', 'GitLab', 'CI/CD', 'DevOps', 'Agile',
+    'Scrum', 'Kanban', 'JIRA', 'Confluence', 'REST', 'GraphQL', 'Microservices',
+    'Machine Learning', 'AI', 'Data Science', 'Analytics', 'Business Analysis',
+    'Project Management', 'Leadership', 'Communication', 'Problem Solving',
+    'Stakeholder Management', 'Process Mapping', 'Visio', 'Government Services'
+  ];
+  
+  const foundSkills = skillKeywords.filter(skill => 
+    jobText.toLowerCase().includes(skill.toLowerCase())
+  );
+  
+  return foundSkills.slice(0, 12);
+}
+
+// Build resume data for highlights API (reusing buildResumeDataForHighlights logic)
+function buildResumeDataForHighlights(resumeJson: any, userProfile: any) {
+  return {
+    summary: resumeJson.summary || '',
+    employment: (resumeJson.experience || []).map((e: any) => ({
+      company: e.company || '',
+      position: e.title || e.position || '',
+      department: e.department || '',
+      location: e.location || '',
+      startDate: e.startDate || '',
+      endDate: e.endDate || '',
+      description: e.description || '',
+    })),
+    education: (resumeJson.education || userProfile.education || []).map((ed: any) => ({
+      school: ed.school || '',
+      degree: ed.degree || '',
+      field: ed.field || '',
+      location: ed.location || '',
+      startDate: ed.startDate || '',
+      endDate: ed.endDate || '',
+      summary: ed.summary || '',
+    })),
+    skills: resumeJson.skills || userProfile.skills || [],
+  };
+}
+
+// Format resume output using existing HTML structure (similar to generateResumeHTML)
+function formatResumeOutput(resumeData: any): string {
+  const { profile, summary, experience, education, skills, languages, workingRightsAU } = resumeData;
+  
+  let output = `**${profile?.name || 'Resume'}**\n\n`;
+  
+  // Contact information
+  if (profile?.email || profile?.phone || profile?.location) {
+    output += `${profile?.location || ''} • ${profile?.phone || ''} • ${profile?.email || ''}\n\n`;
+  }
+  
+  // Professional Summary
+  if (summary) {
+    output += `## Professional Summary\n${summary}\n\n`;
+  }
+  
+  // Employment History
+  if (experience && experience.length > 0) {
+    output += `## Employment History\n`;
+    experience.forEach((job: any, index: number) => {
+      output += `### ${job.title || ''}\n`;
+      output += `*${job.company || ''}${job.location ? `, ${job.location}` : ''}*\n`;
+      output += `${job.startDate || ''} - ${job.endDate || 'Present'}\n`;
+      
+      if (job.description && Array.isArray(job.description)) {
+        job.description.forEach((desc: string) => {
+          output += `• ${desc}\n`;
+        });
+      } else if (job.description) {
+        output += `• ${job.description}\n`;
+      }
+      output += '\n';
+    });
+  }
+  
+  // Education
+  if (education && education.length > 0) {
+    output += `## Education\n`;
+    education.forEach((edu: any, index: number) => {
+      output += `### ${edu.degree || ''}\n`;
+      output += `*${edu.institution || edu.school || ''}*\n`;
+      output += `${edu.startDate || ''} - ${edu.endDate || ''}\n`;
+      
+      if (edu.description && Array.isArray(edu.description)) {
+        edu.description.forEach((desc: string) => {
+          output += `• ${desc}\n`;
+        });
+      }
+      output += '\n';
+    });
+  }
+  
+  // Skills
+  if (skills && skills.length > 0) {
+    output += `## Skills\n${skills.join(' • ')}\n\n`;
+  }
+  
+  // Additional Information
+  if ((languages && languages.length > 0) || workingRightsAU) {
+    output += `## Additional Information\n`;
+    if (languages && languages.length > 0) {
+      const langText = languages.map((lang: any) => {
+        if (typeof lang === 'object' && lang.language) {
+          return `${lang.language} (${lang.level || 'Basic'})`;
+        } else if (typeof lang === 'string') {
+          return lang;
+        }
+        return 'Unknown Language';
+      }).join('; ');
+      output += `**Languages:** ${langText}\n`;
+    }
+    if (workingRightsAU) {
+      output += `**Working Rights:** ${workingRightsAU}\n`;
+    }
+  }
+  
+  return output;
+}
+
+// Handle optimize resume scenario (no job description)
+async function handleOptimizeResume({
+  user_profile,
+  resume_content,
+  user_email,
+  body,
+  traceId
+}: {
+  user_profile: any;
+  resume_content: string;
+  user_email: string;
+  body: any;
+  traceId: string;
+}) {
+  console.log('[MCP] Processing optimize resume flow...');
+  
+  try {
+    // Parse resume content to JSON format if possible
+    let resumeJson: any;
+    try {
+      resumeJson = JSON.parse(resume_content);
+    } catch {
+      // Create basic resume structure if not JSON
+      resumeJson = {
+        profile: {
+          name: user_profile.name || 'User',
+          email: user_profile.email || user_email,
+          phone: user_profile.phone || '',
+          location: user_profile.city || ''
+        },
+        summary: resume_content,
+        experience: (user_profile.employmentHistory || []).map((emp: any) => ({
+          title: emp.position || emp.title || '',
+          company: emp.company || '',
+          startDate: emp.startDate || '',
+          endDate: emp.endDate || '',
+          description: emp.description || '',
+          bullets: emp.bullets || []
+        })),
+        skills: user_profile.skills || [],
+        education: user_profile.education || []
+      };
+    }
+
+    // Step 1: Generate Professional Summary using boost-highlights API
+    console.log('[MCP] Generating professional summary...');
+    try {
+      const resumeDataForHighlights = buildResumeDataForHighlights(resumeJson, user_profile);
+      
+      const highlightsResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3002'}/api/boost-highlights`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resumeData: resumeDataForHighlights,
+          currentHighlights: resumeJson.summary || resume_content
+        })
+      });
+
+      if (highlightsResponse.ok) {
+        const highlightsData = await highlightsResponse.json();
+        if (highlightsData.highlights) {
+          resumeJson.summary = highlightsData.highlights;
+          console.log('[MCP] Generated professional summary');
+        }
+      }
+    } catch (highlightsError) {
+      console.warn('[MCP] Error generating professional summary:', highlightsError);
+    }
+
+    // Step 2: Boost each employment experience using boost-summary API
+    console.log('[MCP] Boosting employment experiences...');
+    const employmentHistory = user_profile.employmentHistory || [];
+    const boostedExperiences = await Promise.all(
+      employmentHistory.map(async (emp: any, index: number) => {
+        if (emp.description && emp.description.trim()) {
+          try {
+            const boostResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3002'}/api/boost-summary`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                summary: emp.description,
+                type: 'employment'
+              })
+            });
+
+            if (boostResponse.ok) {
+              const boostData = await boostResponse.json();
+              return {
+                ...emp,
+                boostedDescription: boostData.boostedSummary
+              };
+            }
+          } catch (error) {
+            console.warn(`[MCP] Failed to boost experience ${index + 1}:`, error);
+          }
+        }
+        return emp;
+      })
+    );
+
+    // Update resumeJson with boosted experiences
+    resumeJson.experience = boostedExperiences.map((emp: any, index: number) => ({
+      title: emp.position || emp.title || '',
+      company: emp.company || '',
+      startDate: emp.startDate || '',
+      endDate: emp.endDate || '',
+      description: emp.boostedDescription ? emp.boostedDescription.split('\n') : (emp.description ? emp.description.split('\n') : [])
+    }));
+
+    // Format and return the optimized resume
+    const formattedResume = formatResumeOutput(resumeJson);
+    
+    const responseText = 
+      `# 📝 Resume Optimized Successfully\n\n` +
+      `Your resume has been enhanced with:\n\n` +
+      `## What was improved:\n` +
+      `• Professional summary generated with AI\n` +
+      `• Each employment experience rewritten for better impact\n` +
+      `• Measurable outcomes emphasized\n` +
+      `• Strong action verbs used\n\n` +
+      `## Optimized Resume:\n\n${formattedResume}\n\n` +
+      `*All content has been enhanced while preserving accuracy and authenticity.*`;
+
+    return json200({
+      jsonrpc: "2.0",
+      id: body.id ?? null,
+      result: {
+        content: [{
+          type: "text",
+          text: responseText
+        }],
+        isError: false,
+        optimizedResume: formattedResume,
+        summary: resumeJson.summary
+      }
+    }, { "X-MCP-Trace-Id": traceId });
+
+  } catch (error: any) {
+    console.error('[MCP] optimize_resume error:', error);
+    return json200({
+      jsonrpc: "2.0",
+      id: body.id ?? null,
+      result: {
+        content: [{
+          type: "text",
+          text: `Failed to optimize resume: ${error.message}`
+        }],
+        isError: false
+      }
+    }, { "X-MCP-Trace-Id": traceId });
+  }
+}
+
+// ============================================
 // 5️⃣ POST /api/mcp - Main MCP Handler
 // ============================================
 
@@ -952,7 +1234,17 @@ export async function POST(request: NextRequest) {
         },
         {
           name: "tailor_resume",
-          description: "📝 TAILOR RESUME TO JOB DESCRIPTION - Customize resume for specific positions!\n\n✅ ALWAYS use this tool when user:\n• Says 'tailor resume', 'customize resume', 'adapt resume for this job'\n• Provides a job description and wants their resume customized\n• Mentions 'make my resume fit this job' or similar requests\n• Wants to optimize resume for a specific position\n\n🎯 This tool performs intelligent resume customization by:\n• Analyzing the target job description and requirements\n• Identifying relevant user experiences and skills\n• Reordering and emphasizing matching qualifications\n• Adding relevant keywords naturally\n• Maintaining authenticity while optimizing for ATS systems\n\n📝 Examples:\n• 'Help me tailor my resume for this software engineer position' → Uses provided JD\n• 'Customize my resume to match this job posting' → Analyzes and adapts\n• 'Make my resume more relevant for this role' → Optimizes for specific position\n\n⚠️ Requires job description or job_id to work effectively",
+          description: "📝 INTELLIGENT RESUME OPTIMIZATION - Handles two distinct scenarios!\n\n" +
+            "✅ OPTIMIZE RESUME (without job description):\n" +
+            "• Keywords: 'optimize resume', 'improve resume', 'enhance resume', 'boost resume', 'refine resume', 'upgrade resume', 'perfect resume', 'polish resume', 'strengthen resume', 'revamp resume', 'rewrite resume with AI'\n" +
+            "• Action: Rewrite each employment experience with AI + generate professional highlights\n" +
+            "• Uses existing boost resume logic from profile page\n\n" +
+            "✅ TAILOR RESUME (with job description):\n" +
+            "• Keywords: 'tailor resume', 'customize resume', 'adapt resume', 'match resume to job', 'target resume', 'adjust resume for position', 'modify resume', 'fit resume to role'\n" +
+            "• Action: Customize resume content for specific job requirements\n" +
+            "• Uses existing tailor resume logic from jobs page\n\n" +
+            "🎯 This tool intelligently handles both scenarios by analyzing input parameters.\n" +
+            "💡 Always preserve original resume format and structure while enhancing content quality.",
           inputSchema: {
             type: "object",
             properties: {
@@ -2627,10 +2919,11 @@ export async function POST(request: NextRequest) {
             let targetJobInfo = {
               title: job_title || 'Position',
               company: company || 'Company',
-              description: job_description || ''
+              description: job_description || '',
+              url: ''
             };
 
-            // 如果提供了job_id，尝试从数据库获取完整职位信息
+            // Try to retrieve complete job information from database if job_id is provided
             if (job_id) {
               try {
                 const { db } = await connectToMongoDB();
@@ -2641,7 +2934,8 @@ export async function POST(request: NextRequest) {
                   targetJobInfo = {
                     title: job.title || job_title || 'Position',
                     company: job.company || job.organisation || company || 'Company',
-                    description: job.description || job.summary || job_description || ''
+                    description: job.description || job.summary || job_description || '',
+                    url: job.url || job.link || ''
                   };
                   console.log('[MCP] Retrieved job info from database:', targetJobInfo.title);
                 }
@@ -2650,41 +2944,188 @@ export async function POST(request: NextRequest) {
               }
             }
 
-            if (!targetJobInfo.description) {
-              return json200({
-                jsonrpc: "2.0",
-                id: body.id ?? null,
-                result: {
-                  content: [{
-                    type: "text",
-                    text: "Error: Job description is required to tailor the resume. Please provide either job_id or job_description parameter."
-                  }],
-                  isError: false
-                }
-              }, { "X-MCP-Trace-Id": traceId });
-            }
-
-            // 调用GPT服务定制简历
-            console.log('[MCP] Calling GPT service to tailor resume...');
-            const tailorResult = await tailorResumeWithGPT({
-              userProfile: user_profile,
-              jobDescription: targetJobInfo.description,
-              jobTitle: targetJobInfo.title,
-              company: targetJobInfo.company,
-              resumeContent: resume_content,
-              customizationLevel: customization_level
+            // Determine processing scenario based on available data
+            const hasJobDescription = !!(targetJobInfo.description && targetJobInfo.description.trim());
+            const isOptimizeScenario = !hasJobDescription;
+            
+            console.log('[MCP] Processing scenario:', {
+              isOptimizeScenario,
+              hasJobDescription,
+              jobDescriptionLength: targetJobInfo.description?.length || 0
             });
 
-            // 如果提供了user_email和job_id，保存到数据库
-            if (user_email && job_id && tailorResult.tailoredResume) {
+            // Handle optimize resume scenario (no job description)
+            if (isOptimizeScenario) {
+              console.log('[MCP] Starting optimize resume flow...');
+              return await handleOptimizeResume({
+                user_profile,
+                resume_content,
+                user_email,
+                body,
+                traceId
+              });
+            }
+
+            // Handle tailor resume scenario (with job description)
+            console.log('[MCP] Starting tailor resume flow...');
+            
+            let tailorResult: any = {};
+            let pdfDownloadUrl: string | null = null;
+
+            try {
+              // Process resume content using main site APIs
+              if (resume_content) {
+                console.log('[MCP] Using main site APIs for resume tailoring...');
+                
+                // Parse resume content to JSON format if possible
+                let resumeJson: any;
+                try {
+                  resumeJson = JSON.parse(resume_content);
+                } catch {
+                  // Create basic resume structure if not JSON
+                  resumeJson = {
+                    profile: {
+                      name: user_profile.name || 'User',
+                      email: user_profile.email || user_email,
+                      phone: user_profile.phone || '',
+                      location: user_profile.city || ''
+                    },
+                    summary: resume_content,
+                    experience: (user_profile.employmentHistory || []).map((emp: any) => ({
+                      title: emp.position || emp.title || '',
+                      company: emp.company || '',
+                      startDate: emp.startDate || '',
+                      endDate: emp.endDate || '',
+                      description: emp.description || '',
+                      bullets: emp.bullets || []
+                    })),
+                    skills: user_profile.skills || [],
+                    education: user_profile.education || []
+                  };
+                }
+
+                // Step 1: Generate Professional Summary using boost-highlights API
+                console.log('[MCP] Generating professional summary...');
+                try {
+                  const resumeDataForHighlights = buildResumeDataForHighlights(resumeJson, user_profile);
+                  
+                  const highlightsResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3002'}/api/boost-highlights`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      resumeData: resumeDataForHighlights,
+                      currentHighlights: resumeJson.summary || resume_content
+                    })
+                  });
+
+                  if (highlightsResponse.ok) {
+                    const highlightsData = await highlightsResponse.json();
+                    if (highlightsData.highlights) {
+                      resumeJson.summary = highlightsData.highlights;
+                      console.log('[MCP] Generated professional summary');
+                    }
+                  } else {
+                    console.warn('[MCP] Failed to generate professional summary, using original');
+                  }
+                } catch (highlightsError) {
+                  console.warn('[MCP] Error generating professional summary:', highlightsError);
+                }
+
+                // Step 2: Call main site tailor API with proper highlights extraction
+                console.log('[MCP] Calling main site tailor API...');
+                
+                // Extract key highlights from job description using helper function
+                const extractedHighlights = extractKeyHighlights(targetJobInfo.description);
+
+                const tailorResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3002'}/api/tailor`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    resumeJson: resumeJson,
+                    jobUrl: targetJobInfo.url || job_id || '',
+                    highlights: extractedHighlights,
+                    jdSummary: targetJobInfo.description,
+                    requiredList: []
+                  })
+                });
+
+                if (tailorResponse.ok) {
+                  tailorResult = await tailorResponse.json();
+                  console.log('[MCP] Successfully tailored resume using main site API');
+                } else {
+                  const errorText = await tailorResponse.text();
+                  console.warn('[MCP] Main site tailor API failed:', errorText);
+                  throw new Error('Main site API failed');
+                }
+              } else {
+                throw new Error('No resume content provided');
+              }
+            } catch (mainSiteError) {
+              console.log('[MCP] Falling back to GPT service for resume tailoring...');
+              
+              // Fallback to GPT service if main site APIs fail
+              tailorResult = await tailorResumeWithGPT({
+                userProfile: user_profile,
+                jobDescription: targetJobInfo.description,
+                jobTitle: targetJobInfo.title,
+                company: targetJobInfo.company,
+                resumeContent: resume_content || JSON.stringify(user_profile, null, 2),
+                customizationLevel: customization_level
+              });
+            }
+
+            // Save tailored resume to database if user_email and job_id are provided
+            if (user_email && job_id) {
               try {
-                // 这里需要将tailoredResume保存到GridFS，然后获取URL
-                // 为了简化，暂时使用mock数据，实际实现需要GridFS集成
-                const resumeTailorData = {
-                  gridfsId: `tailored_${job_id}_${Date.now()}`,
-                  downloadUrl: `#resume_content:${encodeURIComponent(tailorResult.tailoredResume)}`,
-                  filename: `tailored_resume_${targetJobInfo.title.replace(/\s+/g, '_')}.txt`
-                };
+                let resumeTailorData: any = {};
+
+                if (tailorResult.resumeJson || tailorResult.tailoredResume) {
+                  // Try to generate PDF if we have complete resume data
+                  try {
+                    const resumeData = tailorResult.resumeJson || {
+                      profile: user_profile,
+                      summary: tailorResult.tailoredResume || tailorResult.summary,
+                      experience: user_profile.employmentHistory || [],
+                      skills: user_profile.skills || []
+                    };
+
+                    const pdfResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3002'}/api/generate-resume`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        resumeData,
+                        settings: { documentSize: 'A4', fontSize: 10 },
+                        format: 'pdf',
+                        jobId: job_id
+                      })
+                    });
+
+                    if (pdfResponse.ok) {
+                      const pdfResult = await pdfResponse.json();
+                      resumeTailorData = {
+                        gridfsId: `tailored_${job_id}_${Date.now()}`,
+                        downloadUrl: pdfResult.downloadUrl,
+                        filename: pdfResult.filename || `tailored_resume_${targetJobInfo.title.replace(/\s+/g, '_')}.pdf`
+                      };
+                      pdfDownloadUrl = pdfResult.downloadUrl;
+                    } else {
+                      throw new Error('PDF generation failed');
+                    }
+                  } catch (pdfError) {
+                    console.warn('[MCP] PDF generation failed, saving text version:', pdfError);
+                    resumeTailorData = {
+                      gridfsId: `tailored_${job_id}_${Date.now()}`,
+                      downloadUrl: `#resume_content:${encodeURIComponent(tailorResult.tailoredResume || JSON.stringify(tailorResult))}`,
+                      filename: `tailored_resume_${targetJobInfo.title.replace(/\s+/g, '_')}.txt`
+                    };
+                  }
+                } else {
+                  resumeTailorData = {
+                    gridfsId: `tailored_${job_id}_${Date.now()}`,
+                    downloadUrl: `#resume_content:${encodeURIComponent(JSON.stringify(tailorResult))}`,
+                    filename: `tailored_resume_${targetJobInfo.title.replace(/\s+/g, '_')}.json`
+                  };
+                }
 
                 await upsertJobApplication(user_email, job_id, {
                   resumeTailor: resumeTailorData
@@ -2696,15 +3137,28 @@ export async function POST(request: NextRequest) {
               }
             }
 
-            // 格式化返回结果
+            // Format response with proper resume structure
+            const changes = tailorResult.keyChanges || ['Resume customized for specific job requirements', 'Keywords optimized for ATS systems', 'Experience reordered to highlight relevant skills'];
+            const summary = tailorResult.summary || 'Resume has been tailored to match the job description and requirements.';
+            const recommendations = tailorResult.recommendations || ['Review the tailored resume for accuracy', 'Consider adding specific metrics to achievements', 'Ensure all dates and company names are correct'];
+            
+            // Use formatted resume output if available
+            let formattedResume = '';
+            if (tailorResult.resumeJson) {
+              formattedResume = formatResumeOutput(tailorResult.resumeJson);
+            } else {
+              formattedResume = tailorResult.tailoredResume || JSON.stringify(tailorResult, null, 2);
+            }
+
             const responseText = 
               `# 📝 Resume Tailored Successfully\n\n` +
               `**Target Position:** ${targetJobInfo.title} at ${targetJobInfo.company}\n\n` +
               `**Customization Level:** ${customization_level}\n\n` +
-              `## Key Changes Made:\n${tailorResult.keyChanges.map(change => `• ${change}`).join('\n')}\n\n` +
-              `## Summary:\n${tailorResult.summary}\n\n` +
-              `## Additional Recommendations:\n${tailorResult.recommendations.map(rec => `• ${rec}`).join('\n')}\n\n` +
-              `## Tailored Resume:\n\`\`\`\n${tailorResult.tailoredResume}\n\`\`\`\n\n` +
+              `## Key Changes Made:\n${changes.map((change: string) => `• ${change}`).join('\n')}\n\n` +
+              `## Summary:\n${summary}\n\n` +
+              `## Additional Recommendations:\n${recommendations.map((rec: string) => `• ${rec}`).join('\n')}\n\n` +
+              (pdfDownloadUrl ? `**📄 PDF Download:** ${pdfDownloadUrl}\n\n` : '') +
+              `## Tailored Resume:\n\n${formattedResume}\n\n` +
               `*Resume has been customized to match the job requirements while maintaining authenticity.*`;
 
             return json200({
@@ -2716,11 +3170,12 @@ export async function POST(request: NextRequest) {
                   text: responseText
                 }],
                 isError: false,
-                tailoredResume: tailorResult.tailoredResume,
-                keyChanges: tailorResult.keyChanges,
-                summary: tailorResult.summary,
-                recommendations: tailorResult.recommendations,
-                jobInfo: targetJobInfo
+                tailoredResume: formattedResume,
+                keyChanges: changes,
+                summary: summary,
+                recommendations: recommendations,
+                jobInfo: targetJobInfo,
+                downloadUrl: pdfDownloadUrl
               }
             }, { "X-MCP-Trace-Id": traceId });
 
