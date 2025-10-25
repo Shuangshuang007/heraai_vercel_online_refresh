@@ -1258,7 +1258,7 @@ export default function ProfilePage() {
                   <div className="sm:col-span-6">
                     <JobTitleSelector
                       value={watch('jobTitle')?.[0] || ''}
-                      onChange={(value) => setValue('jobTitle', [value])}
+                      onChange={(value) => setValue('jobTitle', value ? [value] : [])}
                       language={language}
                       error={errors.jobTitle?.message}
                       required

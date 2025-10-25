@@ -5,7 +5,7 @@ import jobTitles from '@/data/jobTitles.json';
 
 interface JobTitleSelectorProps {
   value: string;
-  onChange: (value: string) => void;
+  onChange: (value: string | null) => void;
   language: 'en' | 'zh';
   error?: string;
   required?: boolean;
