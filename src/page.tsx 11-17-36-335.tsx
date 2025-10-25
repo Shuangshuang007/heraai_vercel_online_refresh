@@ -1389,7 +1389,7 @@ export default function ProfilePage() {
                       onClick={() => router.push('/jobs')}
                       className="px-4 py-2 rounded bg-blue-600 text-white font-medium hover:bg-blue-700"
                     >
-                      {language === 'en' ? 'Next - Jobs' : '下一步 - 职位'}
+                      {language === 'en' ? 'Search Jobs' : '搜索职位'}
                     </Button>
                   </div>
                   <p className="text-xs text-gray-500 text-right mt-2">

@@ -141,8 +141,8 @@ User Profile:
 
 Please provide a JSON response with the following structure:
 {
-  "primaryTitles": ["5-6 most relevant job titles"],
-  "secondaryTitles": ["6-8 alternative job titles"],
+  "primaryTitles": ["3-4 most relevant job titles"],
+  "secondaryTitles": ["5-8 alternative job titles"],
   "summarySentences": [
     "Brief explanation of the recommendation strategy",
     "Why these roles are suitable",

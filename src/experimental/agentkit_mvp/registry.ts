@@ -42,3 +42,5 @@ export const ToolRegistry = {
     }))
   }),
 } satisfies Record<string, (args: AgentStep['args']) => Promise<unknown>>;
+
+

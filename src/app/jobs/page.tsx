@@ -19,6 +19,13 @@ import { Button } from '@/components/ui/Button';
 import { fetchJobs } from '@/services/jobFetchService';
 import { normalizeEmploymentType, parseWorkMode } from '@/utils/employmentUtils';
 import { Checkbox } from '@/components/ui/Checkbox';
+import { diffWithProfile } from '@/utils/tailor/diffWithProfile';
+import { TailorPreview } from '@/components/TailorResume/TailorPreview';
+import { Settings } from 'lucide-react';
+import { AccountSettingIcon } from '@/components/AccountSettingIcon';
+import { usePremiumStatus } from '@/hooks/usePremiumStatus';
+import { PaymentModal } from '@/components/PaymentModal';
+import AutoApplyTip from '@/components/AutoApplyTip';
 
 interface JobResult {
   jobs: Job[];
@@ -37,7 +44,18 @@ interface LinkedInJob {
 
 // Add cache-related constants and types
 const CACHE_KEY = 'job_search_cache';
-const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours expiry
+const CACHE_EXPIRY = 48 * 60 * 60 * 1000; // 48 hours expiry
+
+// 防抖相关常量和类型
+const DEBOUNCE_KEY = 'job_search_debounce';
+const DEBOUNCE_EXPIRY = 60 * 1000; // 1分钟防抖
+
+interface DebounceData {
+  jobTitle: string;
+  city: string;
+  timestamp: number;
+  jobs: Job[];
+}
 
 interface CacheData {
   jobs: Job[];
@@ -48,6 +66,59 @@ interface CacheData {
     skills: string[];
   };
 }
+
+// 防抖工具函数
+const debounceUtils = {
+  getDebounce: (jobTitle: string, city: string): Job[] | null => {
+    try {
+      const debounced = localStorage.getItem(DEBOUNCE_KEY);
+      if (!debounced) return null;
+      
+      const data: DebounceData = JSON.parse(debounced);
+      const now = Date.now();
+      
+      // 检查是否是相同的jobTitle + city组合
+      if (data.jobTitle === jobTitle && data.city === city) {
+        // 检查是否在1分钟内
+        if (now - data.timestamp < DEBOUNCE_EXPIRY) {
+          console.log('✓ Using debounced job data (within 1 minute)');
+          return data.jobs;
+        } else {
+          // 超过1分钟，清除防抖数据
+          localStorage.removeItem(DEBOUNCE_KEY);
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error reading debounce:', error);
+      return null;
+    }
+  },
+  
+  setDebounce: (jobTitle: string, city: string, jobs: Job[]) => {
+    try {
+      const debounceData: DebounceData = {
+        jobTitle,
+        city,
+        timestamp: Date.now(),
+        jobs
+      };
+      localStorage.setItem(DEBOUNCE_KEY, JSON.stringify(debounceData));
+      console.log('✓ Job search debounced for 1 minute');
+    } catch (error) {
+      console.error('Error setting debounce:', error);
+    }
+  },
+  
+  clearDebounce: () => {
+    try {
+      localStorage.removeItem(DEBOUNCE_KEY);
+    } catch (error) {
+      console.error('Error clearing debounce:', error);
+    }
+  }
+};
 
 // Cache utility functions
 const cacheUtils = {
@@ -186,6 +257,17 @@ function JobsPageContent() {
   const screenshotRef = useRef<HTMLImageElement>(null);
   let wsRef = useRef<WebSocket | null>(null);
   const jobAssistantRef = useRef<JobAssistantRef>(null);
+  
+  // Tailor Resume 预览相关状态
+  const [showTailorPreview, setShowTailorPreview] = useState(false);
+  const [tailorJob, setTailorJob] = useState<Job | null>(null);
+  
+  // 使用Premium状态hook
+  const premiumStatus = usePremiumStatus();
+  
+  // Payment Modal 状态
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentErrorCode, setPaymentErrorCode] = useState<string>('');
 
   // Get user configuration after component mounts
   useEffect(() => {
@@ -267,6 +349,21 @@ function JobsPageContent() {
           StorageManager.saveLastSearch(jobTitle, city);
         }
         
+        // Check debounce first (1 minute)
+        const debouncedJobs = debounceUtils.getDebounce(jobTitle, city);
+        if (debouncedJobs) {
+          appendToTerminal('✓ Using debounced job data (within 1 minute)');
+          setAllJobs(debouncedJobs);
+          setTotalJobs(debouncedJobs.length);
+          setTotalPages(Math.ceil(debouncedJobs.length / jobsPerPage));
+          setPagedJobs(debouncedJobs.slice(0, jobsPerPage));
+          if (debouncedJobs.length > 0) {
+            setSelectedJob(debouncedJobs[0]);
+          }
+          setIsLoading(false);
+          return;
+        }
+        
         // Check cache
         const cachedData = cacheUtils.getCache();
         if (cachedData && 
@@ -304,6 +401,25 @@ function JobsPageContent() {
             throw new Error(`API error: ${response.statusText}`);
           }
           const result = await response.json();
+          
+          // 记录Job Search到MongoDB
+          if (userProfile?.email) {
+            try {
+              await fetch('/api/profile/record-job-search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  email: userProfile.email,
+                  jobTitle: jobTitle,
+                  location: city
+                })
+              });
+              appendToTerminal('✓ Job search recorded to MongoDB');
+            } catch (recordError) {
+              appendToTerminal('⚠ Failed to record job search to MongoDB');
+              console.warn('Job search record error:', recordError);
+            }
+          }
           
           // Set all state variables correctly
           const validJobs = (result.jobs || []).map((job: any) => ({
@@ -402,6 +518,9 @@ function JobsPageContent() {
           if (sortedJobs.length > 0) {
             cacheUtils.setCache(sortedJobs, { jobTitle, city, skills });
             appendToTerminal('✓ Job data cached for future use');
+            
+            // Set debounce data (1 minute)
+            debounceUtils.setDebounce(jobTitle, city, sortedJobs);
           }
           
           // Save search record
@@ -511,6 +630,23 @@ function JobsPageContent() {
     setCurrentPage(1);
     
     try {
+      const jobTitle = profile.jobTitle?.[0];
+      const city = profile.city;
+      
+      // Check debounce first (1 minute)
+      const debouncedJobs = debounceUtils.getDebounce(jobTitle, city);
+      if (debouncedJobs) {
+        appendToTerminal('✓ Using debounced job data (within 1 minute)');
+        setAllJobs(debouncedJobs);
+        setTotalJobs(debouncedJobs.length);
+        setTotalPages(Math.ceil(debouncedJobs.length / jobsPerPage));
+        setPagedJobs(debouncedJobs.slice(0, jobsPerPage));
+        if (debouncedJobs.length > 0) {
+          setSelectedJob(debouncedJobs[0]);
+        }
+        setIsLoading(false);
+        return;
+      }
       const skillsStr = localStorage.getItem('skills');
       const skillsArray = skillsStr ? JSON.parse(skillsStr) : [];
       const skills = skillsArray.map((skill: any) => 
@@ -547,6 +683,9 @@ function JobsPageContent() {
       if (validJobs.length > 0) {
         cacheUtils.setCache(validJobs, { jobTitle: profile.jobTitle?.[0] || '', city: profile.city || '', skills });
         appendToTerminal('✓ Job data cached for future use');
+        
+        // Set debounce data (1 minute)
+        debounceUtils.setDebounce(jobTitle, city, validJobs);
       }
     } catch (error) {
       console.error('Error in fetchJobs:', error);
@@ -558,6 +697,7 @@ function JobsPageContent() {
 
   const handleUpdatePreferences = (preferences: Preferences) => {
     cacheUtils.clearCache();
+    debounceUtils.clearDebounce();
     const updatedSearchParams = new URLSearchParams();
     Object.entries(preferences).forEach(([key, value]) => {
       if (value) {
@@ -617,19 +757,43 @@ function JobsPageContent() {
     }, []);
     localStorage.setItem('savedJobs', JSON.stringify(merged));
 
-    // 通过API保存到数据库
-    const userId = 1; // 临时测试用户ID
-    for (const job of jobsToSave) {
+    // 保存到MongoDB Profile的applications字段
+    appendToTerminal(`🔍 Debug: userProfile.email = ${userProfile?.email || 'undefined'}`);
+    
+    if (userProfile?.email) {
+      appendToTerminal(`🔍 Debug: Attempting to save ${jobsToSave.length} jobs to MongoDB...`);
       try {
-        await fetch('/api/save-job', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, jobId: job.id, status: 'saved' }),
-        });
-        console.log('[DB] Job saved:', job.id);
+        for (const job of jobsToSave) {
+          appendToTerminal(`🔍 Debug: Saving job ${job.id} (${job.title} at ${job.company})`);
+          const response = await fetch('/api/profile/upsert-application', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: userProfile.email,
+              jobId: job.id,
+              jobSave: {
+                title: job.title,
+                company: job.company
+              }
+            })
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            appendToTerminal(`⚠ API Error: ${response.status} ${response.statusText} - ${errorText}`);
+            throw new Error(`API Error: ${response.status} ${response.statusText}`);
+          }
+          
+          const result = await response.json();
+          appendToTerminal(`🔍 Debug: Job ${job.id} saved successfully: ${JSON.stringify(result)}`);
+        }
+        appendToTerminal(`✓ ${jobsToSave.length} jobs saved to MongoDB Profile`);
       } catch (error) {
-        console.error('[DB] Error saving job:', error);
+        appendToTerminal(`⚠ Failed to save jobs to MongoDB Profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        console.warn('MongoDB save error:', error);
       }
+    } else {
+      appendToTerminal('⚠ Cannot save to MongoDB: userProfile.email is missing');
     }
   };
 
@@ -725,16 +889,29 @@ function JobsPageContent() {
               <Link href="/applications" className="border-b-2 border-transparent h-[56px] flex items-center text-[18px] font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700">
                 Applications
               </Link>
+              <Link href="/resources" className="border-b-2 border-transparent h-[56px] flex items-center text-[18px] font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700">
+                Resources
+              </Link>
             </div>
           </div>
-          <select
-            className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm h-9"
-            value={language}
-            onChange={(e) => setLanguage(e.target.value as 'en' | 'zh')}
-          >
-            <option value="en">English</option>
-            <option value="zh">中文</option>
-          </select>
+          <div className="flex items-center space-x-4">
+                          <AccountSettingIcon 
+                isPremium={premiumStatus.isPremium}
+                className="ml-8"
+                expiresAt={premiumStatus.expiresAt}
+                expiresAtAEST={premiumStatus.expiresAtAEST}
+              />
+            {/* 语言栏暂时注释掉 - 这一版本不上线中文
+            <select
+              className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm h-9"
+              value={language}
+              onChange={(e) => setLanguage(e.target.value as 'en' | 'zh')}
+            >
+              <option value="en">English</option>
+              <option value="zh">中文</option>
+            </select>
+            */}
+          </div>
         </nav>
       </div>
 
@@ -748,9 +925,12 @@ function JobsPageContent() {
                 <div className="sticky top-0 bg-white z-10 p-3 border-b border-gray-200">
                   <div className="flex flex-col space-y-2">
                     <div className="flex justify-between items-center">
-                      <h2 className="text-base font-semibold text-gray-900 dark:text-white">
-                        {language === 'zh' ? '推荐职位' : 'Recommended Jobs'}
-                      </h2>
+                      <div className="flex items-center">
+                        <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+                          {language === 'zh' ? '推荐职位' : 'Recommended Jobs'}
+                        </h2>
+                        <AutoApplyTip />
+                      </div>
                       <span className="text-sm text-gray-500">
                         {totalJobs} {language === 'zh' ? '个职位' : 'jobs'}
                       </span>
@@ -816,6 +996,176 @@ function JobsPageContent() {
                             openToRelocate: userProfile.openForRelocation === 'yes'
                           }}
                           cardId={`job-card-${index}`}
+                          renderCustomActions={() => (
+                            <>
+                              <button
+                                type="button"
+                                className="text-xs font-semibold bg-gray-100 text-blue-700 hover:bg-gray-200 rounded px-3 py-1 transition-colors duration-150 shadow-sm mr-2"
+                                style={{ height: '28px', lineHeight: '18px' }}
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  
+                                  // 添加调试日志
+                                  console.log('🔍 Tailor Resume+ clicked for job:', job.title);
+                                  console.log('🔍 userProfile:', userProfile);
+                                  console.log('🔍 userProfile.email:', userProfile?.email);
+                                  
+                                  // Tailor Resume+ 功能现在免费使用，不需要检查订阅状态
+                                  // 注释掉付费检查逻辑，付费检查移到Download按钮
+                                  /*
+                                  // 前置拦截：检查订阅状态
+                                  if (!premiumStatus.isPremiumToday) {
+                                    setPaymentErrorCode('PAYWALL_TAILOR_RESUME');
+                                    setShowPaymentModal(true);
+                                    return;
+                                  }
+                                  */
+                                  
+                                  // 检查 Working Rights
+                                  const wr =
+                                    userProfile?.workingRightsAU ||
+                                    userProfile?.workRights ||
+                                    userProfile?.workingRights ||
+                                    userProfile?.rightToWork ||
+                                    userProfile?.visaStatus ||
+                                    '';
+                                  
+                                  console.log('🔍 Working Rights check:', {
+                                    workingRightsAU: userProfile?.workingRightsAU,
+                                    workRights: userProfile?.workRights,
+                                    workingRights: userProfile?.workingRights,
+                                    rightToWork: userProfile?.rightToWork,
+                                    visaStatus: userProfile?.visaStatus,
+                                    finalValue: wr,
+                                    isEmpty: !wr.trim()
+                                  });
+
+                                  if (!wr.trim()) {
+                                    console.error('Please fill Working Rights in Profile');
+                                    if (typeof window !== 'undefined' && (window as any).showToast) {
+                                      (window as any).showToast(language === 'zh' ? '请在个人资料中填写工作权限' : 'Please fill Working Rights in Profile', 'error');
+                                    } else {
+                                      alert(language === 'zh' ? '请在个人资料中填写工作权限' : 'Please fill Working Rights in Profile');
+                                    }
+                                    return;
+                                  }
+
+                                  console.log('✅ Working Rights check passed, proceeding with auto-save...');
+
+                                  // 自动保存Job到MongoDB（如果用户没有保存过）
+                                  if (userProfile?.email) {
+                                    console.log('🔍 Attempting to auto-save job to MongoDB...');
+                                    try {
+                                      const response = await fetch('/api/profile/upsert-application', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                          email: userProfile.email,
+                                          jobId: job.id,
+                                          jobSave: {
+                                            title: job.title,
+                                            company: job.company
+                                          }
+                                        })
+                                      });
+                                      
+                                      console.log('🔍 API Response status:', response.status);
+                                      console.log('🔍 API Response ok:', response.ok);
+                                      
+                                      if (response.ok) {
+                                        const responseData = await response.json();
+                                        console.log('🔍 API Response data:', responseData);
+                                        appendToTerminal(`✓ Job "${job.title}" at ${job.company} auto-saved to MongoDB for Tailor Resume`);
+                                      } else {
+                                        const errorText = await response.text();
+                                        console.error('❌ API call failed:', response.status, errorText);
+                                        appendToTerminal(`⚠ API call failed: ${response.status} ${errorText}`);
+                                      }
+                                    } catch (error) {
+                                      console.error('❌ Auto-save error:', error);
+                                      appendToTerminal('⚠ Failed to auto-save job to MongoDB');
+                                      console.warn('Auto-save error:', error);
+                                    }
+                                  } else {
+                                    console.warn('⚠ userProfile.email is missing:', userProfile);
+                                  }
+
+                                  // 显示 Tailor Resume 预览
+                                  setTailorJob(job);
+                                  setShowTailorPreview(true);
+                                  
+                                  // 自动保存Job到Applications（在显示预览之前）
+                                  if (userProfile?.email) {
+                                    try {
+                                      // 1. 保存到localStorage (savedJobs)
+                                      const existing = JSON.parse(localStorage.getItem('savedJobs') || '[]');
+                                      if (!existing.find((j: any) => j.id === job.id)) {
+                                        existing.push(job);
+                                        localStorage.setItem('savedJobs', JSON.stringify(existing));
+                                        console.log(`✓ Job "${job.title}" auto-saved to localStorage`);
+                                      }
+                                      
+                                      // 2. 保存到MongoDB (applications)
+                                      await fetch('/api/profile/upsert-application', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                          email: userProfile.email,
+                                          jobId: job.id,
+                                          jobSave: {
+                                            title: job.title,
+                                            company: job.company
+                                          }
+                                        })
+                                      });
+                                      
+                                      console.log(`✓ Job "${job.title}" auto-saved to Applications for Tailor Resume`);
+                                    } catch (error) {
+                                      console.warn('⚠ Failed to auto-save job to Applications');
+                                    }
+                                  }
+                                }}
+                              >
+                                {language === 'zh' ? '定制简历+' : 'Tailor Resume+'}
+                              </button>
+                              <button
+                                type="button"
+                                className="text-xs font-semibold bg-gray-100 text-blue-700 hover:bg-gray-200 rounded px-3 py-1 transition-colors duration-150 shadow-sm mr-2"
+                                style={{ height: '28px', lineHeight: '18px' }}
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  if (window && window.dispatchEvent) {
+                                    window.dispatchEvent(new CustomEvent('send-job-to-chat', {
+                                      detail: {
+                                        title: job.title,
+                                        company: job.company,
+                                        whoWeAre: job.detailedSummary?.split('\n\n')[0] || '',
+                                        whoWeAreLookingFor: job.detailedSummary?.split('\n\n')[1] || '',
+                                        matchScore: job.matchScore,
+                                        matchAnalysis: job.matchAnalysis || '',
+                                        url: job.url || '',
+                                      }
+                                    }));
+                                  }
+                                }}
+                              >
+                                {language === 'zh' ? '发送到聊天' : 'Chat Job'}
+                              </button>
+                              {job.url && (
+                                <button
+                                  type="button"
+                                  className="text-xs font-semibold bg-gray-100 text-blue-700 hover:bg-gray-200 rounded px-3 py-1 transition-colors duration-150 shadow-sm"
+                                  style={{ height: '28px', lineHeight: '18px' }}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    window.open(job.url, '_blank', 'noopener,noreferrer');
+                                  }}
+                                >
+                                  {language === 'zh' ? '申请' : 'Apply'}
+                                </button>
+                              )}
+                            </>
+                          )}
                         />
                       ))}
                     </div>
@@ -918,7 +1268,7 @@ function JobsPageContent() {
                               {processedLine}
                               <br />
                               <span style={{ color: '#16a34a', fontWeight: 500 }}>
-                                Jobs refresh every 24h — type "Refresh Jobs" to update.
+                                Jobs refresh every 48h — type "Refresh Jobs" to update.
                               </span>
                             </div>
                           );
@@ -996,6 +1346,151 @@ function JobsPageContent() {
 
         <JobAssistant ref={jobAssistantRef} onUpdatePreferences={handleUpdatePreferences} language={language} />
 
+        {/* Tailor Resume 预览 */}
+        {showTailorPreview && tailorJob && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div className="max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+              <TailorPreview
+                job={tailorJob}
+                userProfile={userProfile}
+                onGenerate={async (previewData: any) => {
+                  try {
+                    appendToTerminal('📄 Generating tailored resume...');
+                    
+                    // 规范化languages数据
+                    const normalizedPreviewData = {
+                      ...previewData,
+                      languages: (previewData.languages || []).map((lang: any) => {
+                        // 规则1：如果是对象，格式化为 "Language (Level)"
+                        if (typeof lang === 'object' && lang) {
+                          const languageName = lang.language || lang.name || lang.label || 'Unknown';
+                          const level = lang.level || lang.proficiency || lang.value || 'Basic';
+                          
+                          // 映射到标准文案
+                          const standardLevel = (() => {
+                            const levelLower = String(level).toLowerCase();
+                            if (levelLower.includes('native') || levelLower.includes('母语')) return 'Native';
+                            if (levelLower.includes('fluent') || levelLower.includes('流利')) return 'Fluent';
+                            if (levelLower.includes('conversational') || levelLower.includes('日常')) return 'Conversational';
+                            if (levelLower.includes('basic') || levelLower.includes('基础')) return 'Basic';
+                            return level;
+                          })();
+                          
+                          return `${languageName} (${standardLevel})`;
+                        }
+                        
+                        // 规则2：如果是字符串，原样保留
+                        if (typeof lang === 'string') {
+                          return lang;
+                        }
+                        
+                        // 规则3：空或脏数据，丢弃并记日志
+                        console.warn('Invalid language data:', lang);
+                        return null;
+                      }).filter(Boolean) // 过滤掉null值
+                    };
+                    
+                    console.log('Tailor → 规范化后的languages:', normalizedPreviewData.languages);
+                    
+                    // 生成智能文件名
+                    const firstName = userProfile.firstName || '';
+                    const lastName = userProfile.lastName || '';
+                    const jobTitle = tailorJob.title || '';
+                    const currentDate = new Date();
+                    const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+                    const day = String(currentDate.getDate()).padStart(2, '0');
+                    const year = currentDate.getFullYear();
+                    
+                    // 清理jobTitle，移除特殊字符，保留空格
+                    const cleanJobTitle = jobTitle.replace(/[^a-zA-Z0-9\s]/g, '');
+                    
+                    const smartFilename = `${firstName} ${lastName}_Tailored_${cleanJobTitle}_${year}${month}${day}`;
+                    
+                    // 构建完整的resumeData，包含智能文件名
+                    const resumeData = {
+                      ...normalizedPreviewData,
+                      smartFilename: smartFilename
+                    };
+                    
+                    console.log('Tailor → 使用Profile Generate Resume API:', resumeData);
+                    
+                    // 调用Profile页面的Generate Resume API，完全一致
+                    const response = await fetch('/api/generate-resume', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({
+                        resumeData,
+                        settings: {
+                          documentSize: 'A4',
+                          fontSize: 10
+                        },
+                        format: 'pdf',
+                        jobId: tailorJob.id  // 添加jobId，用于保存到applications数组
+                      })
+                    });
+                    
+                    console.log('Response status:', response.status);
+                    console.log('Response ok:', response.ok);
+                    
+                    if (response.ok) {
+                      const result = await response.json();
+                      
+                      if (result.success) {
+                        // 构建完整的下载URL，包含email参数 - 与Profile页面完全一致
+                        const userEmail = userProfile.email;
+                        const fullDownloadUrl = userEmail 
+                          ? `${result.downloadUrl}?email=${encodeURIComponent(userEmail)}`
+                          : result.downloadUrl;
+                        
+                        appendToTerminal(`✅ Tailored resume generated successfully! Download URL: ${fullDownloadUrl}`);
+                        
+                        // 直接下载文件，不打开新标签页（因为Tailor Resume弹窗已有Preview模式）
+                        const a = document.createElement('a');
+                        a.href = fullDownloadUrl;
+                        a.download = result.filename;
+                        a.style.display = 'none';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        
+                        // 显示成功提示
+                        if (typeof window !== 'undefined' && (window as any).showToast) {
+                          (window as any).showToast(language === 'zh' ? '定制简历生成成功！' : 'Tailored resume generated successfully!', 'success');
+                        }
+                        
+                        // 不自动关闭预览，让用户手动关闭
+                        // setShowTailorPreview(false);
+                        // setTailorJob(null);
+                      } else {
+                        throw new Error(result.error || 'Failed to generate tailored resume');
+                      }
+                    } else {
+                      throw new Error(`Failed to generate tailored resume: ${response.status}`);
+                    }
+                  } catch (error) {
+                    console.error('Error generating tailored resume:', error);
+                    appendToTerminal(`❌ Tailored resume generation failed: ${error instanceof Error ? error.message : error}`);
+                    
+                    // 使用toast显示错误
+                    if (typeof window !== 'undefined' && (window as any).showToast) {
+                      (window as any).showToast(language === 'zh' ? '生成定制简历失败' : 'Failed to generate tailored resume', 'error');
+                    } else {
+                      // 兜底方案
+                      alert(language === 'zh' ? '生成定制简历失败' : 'Failed to generate tailored resume');
+                    }
+                  }
+                }}
+                onCancel={() => {
+                  setShowTailorPreview(false);
+                  setTailorJob(null);
+                }}
+              />
+            </div>
+          </div>
+        )}
+
         <div className="flex justify-end mt-4">
           <Button
             onClick={handleSearch}
@@ -1016,6 +1511,24 @@ function JobsPageContent() {
           </Button>
         </div>
       </div>
+      
+      {/* Payment Modal */}
+      {showPaymentModal && (
+        <PaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => setShowPaymentModal(false)}
+          onSuccess={() => setShowPaymentModal(false)}
+          email={userProfile?.email || ''}
+          errorCode={paymentErrorCode}
+          postPaymentAction={() => {
+            // 支付成功后，重新执行Tailor Resume
+            if (tailorJob) {
+              setShowTailorPreview(true);
+            }
+          }}
+          featureDescription="Access all resume and cover letter features with a Premium Pass"
+        />
+      )}
     </div>
   );
 }

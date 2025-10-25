@@ -52,9 +52,7 @@ const fetchJobsForNonHotJob = async (jobTitle: string, city: string, limit: numb
   const platformLimit = Math.min(limit, 100);
   
   // 从平台获取职位数据
-  const baseUrl = process.env.NODE_ENV === 'production' 
-    ? process.env.VERCEL_URL 
-    : 'http://localhost:3002';
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3002';
   
   const apiUrl = `${baseUrl}/api/job-fetch-router?jobTitle=${encodeURIComponent(jobTitle)}&city=${encodeURIComponent(city)}&limit=${platformLimit}&platform=${platform || ''}`;
   
@@ -85,6 +83,7 @@ export async function fetchJobs(params: {
   limit?: number;
   page?: number;
   platform?: string;
+  userEmail?: string; // 新增用户邮箱参数
 }): Promise<{
   jobs: any[];
   total: number;
@@ -95,9 +94,27 @@ export async function fetchJobs(params: {
   analysis?: any;
   error?: string;
 }> {
-  const { jobTitle, city, limit = 600, page = 1, platform } = params;
+  const { jobTitle, city, limit = 600, page = 1, platform, userEmail } = params;
   
   try {
+    // 记录Job Search到MongoDB（如果提供了用户邮箱）
+    if (userEmail) {
+      try {
+        await fetch('/api/profile/record-job-search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: userEmail,
+            jobTitle,
+            location: city
+          })
+        });
+        console.log(`[JobFetchService] Job search recorded for ${userEmail}: ${jobTitle} in ${city}`);
+      } catch (recordError) {
+        console.warn('[JobFetchService] Failed to record job search:', recordError);
+        // 不影响主要功能，只记录警告
+      }
+    }
     // 判断是否为Hot Job
     const isHotJobRequest = isHotJob(jobTitle, city);
     console.log(`[JobFetchService] Job: ${jobTitle}, City: ${city}, IsHotJob: ${isHotJobRequest}`);

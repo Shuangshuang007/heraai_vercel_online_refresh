@@ -8,6 +8,7 @@ import VisionSection from '@/components/VisionSection';
 import HowItWorksSection from '@/components/HowItWorksSection';
 import FooterSection from '@/components/FooterSection';
 import CookieConsent from '@/components/CookieConsent';
+import FeatureAnnouncement from '@/components/FeatureAnnouncement';
 
 export default function HomePage() {
   const { data: session, status } = useSession();
@@ -19,6 +20,15 @@ export default function HomePage() {
       router.replace("/jobs");
     }
   }, [status, router]);
+
+  // 在用户登录时，将邮箱保存到localStorage
+  useEffect(() => {
+    if (session?.user?.email) {
+      // 将登录邮箱保存到localStorage
+      localStorage.setItem('registeredEmail', session.user.email);
+      console.log('Saved registeredEmail to localStorage from homepage:', session.user.email);
+    }
+  }, [session]);
 
   // 登录状态检测函数（伪代码，后续可抽到utils/auth.ts）
   function isLoggedIn() {
@@ -83,6 +93,7 @@ export default function HomePage() {
       <HowItWorksSection />
       <FooterSection />
       <CookieConsent />
+      <FeatureAnnouncement />
     </div>
   );
 } 

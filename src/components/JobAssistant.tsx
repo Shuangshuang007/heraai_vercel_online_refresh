@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
+import { deduplicateJobTitle } from '../utils/titleDeduplicator';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -641,7 +642,7 @@ export const JobAssistant = forwardRef<JobAssistantRef, JobAssistantProps>(
       <div className="border border-blue-200 bg-blue-50 rounded-lg p-2 mb-1">
         <div className="flex justify-between items-center mb-1">
           <span className="text-black font-semibold" style={{ fontSize: '13px' }}>
-            {job.title} <span className="text-black">@</span> {job.company}
+            {deduplicateJobTitle(job.title)} <span className="text-black">@</span> {job.company}
           </span>
           <button
             className="bg-gray-100 text-blue-700 rounded px-3 py-1 text-xs font-semibold hover:bg-gray-200 transition-colors duration-150 shadow-sm ml-2"

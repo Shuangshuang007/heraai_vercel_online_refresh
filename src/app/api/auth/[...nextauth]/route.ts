@@ -24,11 +24,17 @@ const handler = NextAuth({
       return true;
     },
     async jwt({ token, user, account }) {
-      // 可自定义token内容
+      // 将用户邮箱添加到token中
+      if (user?.email) {
+        token.registeredEmail = user.email;
+      }
       return token;
     },
     async session({ session, token, user }) {
-      // 可自定义session内容
+      // 将registeredEmail添加到session中
+      if (token.registeredEmail && typeof token.registeredEmail === 'string') {
+        session.registeredEmail = token.registeredEmail;
+      }
       return session;
     },
     async redirect() {
