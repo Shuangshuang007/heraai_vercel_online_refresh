@@ -30,35 +30,67 @@ export default function ResourcesPage() {
         videos: [
           {
             id: '1',
-            title: 'How to Ace Christmas Casual Interviews',
-            thumbnail: '/api/placeholder/300/200',
-            createdAt: '2024-01-15',
-            description: 'Learn the essential tips and strategies to succeed in Christmas casual job interviews. From preparation to follow-up, we cover everything you need to know.',
-            url: 'https://example.com/video1'
+            title: 'EP1. Lululemon Christmas Casual Interview Tips',
+            thumbnail: 'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-10-01',
+            description: 'Lululemon\'s Christmas casual hiring process is known for being fast, friendly, and experience-focused. Real interview insights from students who got hired.',
+            url: '/resources/interview-tips/christmas-casuals/lululemon'
           },
           {
             id: '2',
-            title: 'Retail Interview Questions & Answers',
-            thumbnail: '/api/placeholder/300/200',
-            createdAt: '2024-01-12',
-            description: 'Common retail interview questions and how to answer them effectively. Perfect for Christmas casual positions.',
-            url: 'https://example.com/video2'
+            title: 'EP2. David Jones Christmas Casual Interview Tips',
+            thumbnail: 'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-10-20',
+            description: 'David Jones\' Christmas casual recruitment is structured yet friendly, designed to evaluate your communication, customer service mindset, and cultural fit.',
+            url: '/resources/interview-tips/christmas-casuals/david-jones'
           },
           {
             id: '3',
-            title: 'Customer Service Skills for Retail',
-            thumbnail: '/api/placeholder/300/200',
-            createdAt: '2024-01-10',
-            description: 'Essential customer service skills that will help you excel in retail positions during the busy Christmas period.',
-            url: 'https://example.com/video3'
+            title: 'EP3. Myer Christmas Casual Interview Tips',
+            thumbnail: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-10-10',
+            description: 'Myer\'s Christmas casual recruitment process is efficient, structured, and welcoming. The company values a positive attitude, customer focus, and teamwork.',
+            url: '/resources/interview-tips/christmas-casuals/myer'
           },
           {
             id: '4',
-            title: 'Dressing for Retail Interviews',
-            thumbnail: '/api/placeholder/300/200',
-            createdAt: '2024-01-08',
-            description: 'Professional attire guidelines for retail job interviews. Make a great first impression.',
-            url: 'https://example.com/video4'
+            title: 'EP4. JB Hi-Fi Christmas Casual Interview Tips',
+            thumbnail: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-10-08',
+            description: 'JB Hi-Fi\'s Christmas casual recruitment process is energetic, interactive, and team-oriented. The company looks for candidates who are enthusiastic and passionate about technology.',
+            url: '/resources/interview-tips/christmas-casuals/jb-hi-fi'
+          },
+          {
+            id: '5',
+            title: 'EP5. Ralph Lauren Christmas Casual Interview Tips',
+            thumbnail: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-10-05',
+            description: 'Ralph Lauren\'s Christmas casual recruitment process emphasizes refinement, confidence, and customer connection. The interview flow is smooth and efficient.',
+            url: '/resources/interview-tips/christmas-casuals/ralph-lauren'
+          },
+          {
+            id: '6',
+            title: 'EP6. Hugo Boss Christmas Casual Interview Tips',
+            thumbnail: 'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-10-06',
+            description: 'Hugo Boss\'s Christmas Casual recruitment process reflects the brand\'s premium yet approachable style — structured, fair, and focused on communication and confidence.',
+            url: '/resources/interview-tips/christmas-casuals/hugo-boss'
+          },
+          {
+            id: '7',
+            title: 'EP7. David Jones Christmas Casual Logistics Interview Tips',
+            thumbnail: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-10-07',
+            description: 'David Jones\' Logistics Christmas Casual recruitment process is designed to assess teamwork, reliability, and service attitude — not just retail skills.',
+            url: '/resources/interview-tips/christmas-casuals/david-jones-logistics'
+          },
+          {
+            id: '8',
+            title: 'EP8. MUJI Christmas Casual Interview Tips',
+            thumbnail: 'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-09-10',
+            description: 'MUJI\'s Christmas Casual recruitment emphasizes simplicity, teamwork, and calm professionalism — values that mirror the brand itself.',
+            url: '/resources/interview-tips/christmas-casuals/muji'
           }
         ],
         totalCount: 8,
@@ -68,59 +100,267 @@ export default function ResourcesPage() {
         name: 'Graduate & Interns',
         videos: [
           {
-            id: '5',
-            title: 'Graduate Program Interview Tips',
-            thumbnail: '/api/placeholder/300/200',
-            createdAt: '2024-01-20',
-            description: 'Comprehensive guide to graduate program interviews. Learn how to stand out from other candidates.',
-            url: 'https://example.com/video5'
+            id: 'g1',
+            title: 'EP1. Commonwealth Bank Summer Internship Interview Tips',
+            thumbnail: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-10-23',
+            description: 'Master Commonwealth Bank Summer Internship interviews with expert tips from students who got hired. Real Q&As, preparation strategies, and insider advice for Finance, Tech, Markets, and Cyber roles.',
+            url: '/resources/interview-tips/graduate-interns/commonwealth-bank'
           },
           {
-            id: '6',
-            title: 'Behavioral Interview Questions',
-            thumbnail: '/api/placeholder/300/200',
-            createdAt: '2024-01-18',
-            description: 'Master behavioral interview questions using the STAR method. Perfect for graduate and intern positions.',
-            url: 'https://example.com/video6'
+            id: 'g2',
+            title: 'EP2. Westpac Graduate Program Interview Tips',
+            thumbnail: 'https://images.unsplash.com/photo-1521737711867-e3b97375f902?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-11-01',
+            description: 'Learn how to ace Westpac Graduate Program interviews with insider tips and preparation strategies.',
+            url: '/resources/interview-tips/graduate-interns/westpac'
           },
           {
-            id: '7',
-            title: 'Technical Interview Preparation',
-            thumbnail: '/api/placeholder/300/200',
-            createdAt: '2024-01-16',
-            description: 'How to prepare for technical interviews in graduate programs. Coding challenges and problem-solving strategies.',
-            url: 'https://example.com/video7'
+            id: 'g3',
+            title: 'EP3. ANZ Graduate Program Interview Tips',
+            thumbnail: 'https://images.unsplash.com/photo-1521737711867-e3b97375f902?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-11-02',
+            description: 'Get ready for ANZ Graduate Program interviews with comprehensive preparation guides.',
+            url: '/resources/interview-tips/graduate-interns/anz'
           },
           {
-            id: '8',
-            title: 'Internship Interview Success',
-            thumbnail: '/api/placeholder/300/200',
-            createdAt: '2024-01-14',
-            description: 'Tips for acing internship interviews. From research to follow-up, everything you need to know.',
-            url: 'https://example.com/video8'
+            id: 'g4',
+            title: 'EP4. NAB Graduate Program Interview Tips',
+            thumbnail: 'https://images.unsplash.com/photo-1521737711867-e3b97375f902?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-11-03',
+            description: 'Master NAB Graduate Program interviews with expert advice and real examples.',
+            url: '/resources/interview-tips/graduate-interns/nab'
+          },
+          {
+            id: 'g5',
+            title: 'EP5. Deloitte Graduate Program Interview Tips',
+            thumbnail: 'https://images.unsplash.com/photo-1521737711867-e3b97375f902?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-11-04',
+            description: 'Learn the secrets to succeeding in Deloitte Graduate Program interviews.',
+            url: '/resources/interview-tips/graduate-interns/deloitte'
+          },
+          {
+            id: 'g6',
+            title: 'EP6. PwC Graduate Program Interview Tips',
+            thumbnail: 'https://images.unsplash.com/photo-1521737711867-e3b97375f902?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-11-05',
+            description: 'Master PwC Graduate Program interviews with insider tips and strategies.',
+            url: '/resources/interview-tips/graduate-interns/pwc'
+          },
+          {
+            id: 'g7',
+            title: 'EP7. EY Graduate Program Interview Tips',
+            thumbnail: 'https://images.unsplash.com/photo-1521737711867-e3b97375f902?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-11-06',
+            description: 'Get ready for EY Graduate Program interviews with expert preparation guides.',
+            url: '/resources/interview-tips/graduate-interns/ey'
+          },
+          {
+            id: 'g8',
+            title: 'EP8. KPMG Graduate Program Interview Tips',
+            thumbnail: 'https://images.unsplash.com/photo-1521737711867-e3b97375f902?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-11-07',
+            description: 'Learn how to ace KPMG Graduate Program interviews with comprehensive tips.',
+            url: '/resources/interview-tips/graduate-interns/kpmg'
           }
         ],
-        totalCount: 4,
-        showAll: false
+        totalCount: 8,
+        showAll: true
       },
       {
-        name: 'Data Analytics',
+        name: 'Finance & Strategy',
+        videos: [
+          {
+            id: 'f1',
+            title: 'EP1. Top 10 Interview Questions & Tips for Finance/Accounting Roles with Deloitte',
+            thumbnail: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-10-25',
+            description: 'Master Deloitte Finance and Accounting interviews with expert tips from professionals who got hired. Real Q&As, preparation strategies, and insider advice for Finance roles in Australia.',
+            url: '/resources/interview-tips/finance-strategy/deloitte-finance',
+            isArticle: true
+          },
+          {
+            id: 'f2',
+            title: 'Investment Banking Interview Guide Australia 2025',
+            thumbnail: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-10-26',
+            description: 'Master Investment Banking interviews with expert tips from professionals who got hired. Real Q&As, technical prep, and insider advice for IB roles in Australia.',
+            url: '/resources/interview-tips/finance-strategy/investment-banking',
+            isArticle: true
+          },
+          {
+            id: 'f3',
+            title: 'Management Consulting Interview Guide Australia 2025',
+            thumbnail: 'https://images.unsplash.com/photo-1552664730-d307ca884978?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-10-26',
+            description: 'Master Management Consulting interviews with case study prep, behavioral tips, and insider advice from consultants who got hired at top firms.',
+            url: '/resources/interview-tips/finance-strategy/management-consulting',
+            isArticle: true
+          },
+          {
+            id: 'f4',
+            title: 'Private Equity Interview Guide Australia 2025',
+            thumbnail: 'https://images.unsplash.com/photo-1559136555-9303baea8ebd?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-10-27',
+            description: 'Master Private Equity interviews with technical prep, modeling tips, and insider advice from PE professionals who got hired in Australia.',
+            url: '/resources/interview-tips/finance-strategy/private-equity',
+            isArticle: true
+          },
+          {
+            id: 'f5',
+            title: 'Corporate Finance Interview Guide Australia 2025',
+            thumbnail: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-10-28',
+            description: 'Master Corporate Finance interviews with FP&A, treasury, and M&A prep tips from finance professionals who got hired at top companies.',
+            url: '/resources/interview-tips/finance-strategy/corporate-finance',
+            isArticle: true
+          },
+          {
+            id: 'f6',
+            title: 'Hedge Fund Interview Guide Australia 2025',
+            thumbnail: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-10-25',
+            description: 'Master Hedge Fund interviews with quantitative prep, market analysis tips, and insider advice from hedge fund professionals.',
+            url: '/resources/interview-tips/finance-strategy/hedge-fund',
+            isArticle: true
+          },
+          {
+            id: 'f7',
+            title: 'Venture Capital Interview Guide Australia 2025',
+            thumbnail: 'https://images.unsplash.com/photo-1559136555-9303baea8ebd?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-10-26',
+            description: 'Master Venture Capital interviews with startup analysis, due diligence prep, and insider advice from VC professionals in Australia.',
+            url: '/resources/interview-tips/finance-strategy/venture-capital',
+            isArticle: true
+          },
+          {
+            id: 'f8',
+            title: 'Strategy Consulting Interview Guide Australia 2025',
+            thumbnail: 'https://images.unsplash.com/photo-1552664730-d307ca884978?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-10-27',
+            description: 'Master Strategy Consulting interviews with case study frameworks, market analysis prep, and insider advice from strategy consultants.',
+            url: '/resources/interview-tips/finance-strategy/strategy-consulting',
+            isArticle: true
+          },
+          {
+            id: 'f9',
+            title: 'Financial Planning Interview Guide Australia 2025',
+            thumbnail: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-10-28',
+            description: 'Master Financial Planning interviews with client management prep, regulatory knowledge, and insider advice from financial planners.',
+            url: '/resources/interview-tips/finance-strategy/financial-planning',
+            isArticle: true
+          }
+        ],
+        totalCount: 8,
+        showAll: true
+      },
+      {
+        name: 'Tech Interviews',
         videos: [
           {
             id: '9',
-            title: 'Data Analyst Interview Questions',
-            thumbnail: '/api/placeholder/300/200',
-            createdAt: '2024-01-25',
-            description: 'Common data analyst interview questions and how to answer them. SQL, Python, and analytical thinking.',
-            url: 'https://example.com/video9'
+            title: 'EP1. SEEK Tech Interview Questions & Tips',
+            thumbnail: 'https://images.unsplash.com/photo-1551434678-e076c223a692?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+            createdAt: '2025-10-25',
+            description: 'Master SEEK tech interviews with expert tips from engineers who got hired. Real Q&As, preparation strategies, and insider advice for all tech jobs in Australia.',
+            url: '/resources/interview-tips/tech-interviews/seek-tech-interview'
           },
           {
             id: '10',
-            title: 'SQL Interview Challenges',
-            thumbnail: '/api/placeholder/300/200',
-            createdAt: '2024-01-23',
-            description: 'Practice SQL interview questions and challenges. From basic queries to complex data analysis.',
-            url: 'https://example.com/video10'
+             title: 'EP2. ANZ Tech Interview Questions & Tips',
+             thumbnail: 'https://images.unsplash.com/photo-1551434678-e076c223a692?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+             createdAt: '2025-10-25',
+             description: 'Master ANZ tech interviews with expert tips from engineers who got hired. Real Q&As, preparation strategies, and insider advice for all tech jobs in Australia.',
+             url: '/resources/interview-tips/tech-interviews/anz-tech-interview'
+           },
+           {
+             id: '11',
+             title: 'EP3. Commonwealth Bank Tech Interview Questions & Tips',
+             thumbnail: 'https://images.unsplash.com/photo-1551434678-e076c223a692?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+             createdAt: '2025-10-25',
+             description: 'Master Commonwealth Bank tech interviews with expert tips from engineers who got hired. Real Q&As, preparation strategies, and insider advice for all tech jobs in Australia.',
+             url: '/resources/interview-tips/tech-interviews/commbank-tech-interview'
+           },
+           {
+             id: '12',
+             title: 'EP4. Westpac Tech Interview Questions & Tips',
+             thumbnail: 'https://images.unsplash.com/photo-1551434678-e076c223a692?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+             createdAt: '2025-10-25',
+             description: 'Master Westpac tech interviews with expert tips from engineers who got hired. Real Q&As, preparation strategies, and insider advice for all tech jobs in Australia.',
+             url: '/resources/interview-tips/tech-interviews/westpac-tech-interview'
+           },
+           {
+             id: '13',
+             title: 'EP5. NAB Tech Interview Questions & Tips',
+             thumbnail: 'https://images.unsplash.com/photo-1551434678-e076c223a692?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+             createdAt: '2025-10-25',
+             description: 'Master NAB tech interviews with expert tips from engineers who got hired. Real Q&As, preparation strategies, and insider advice for all tech jobs in Australia.',
+             url: '/resources/interview-tips/tech-interviews/nab-tech-interview'
+           },
+           {
+             id: '14',
+             title: 'EP6. Telstra Tech Interview Questions & Tips',
+             thumbnail: 'https://images.unsplash.com/photo-1551434678-e076c223a692?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+             createdAt: '2025-10-25',
+             description: 'Master Telstra tech interviews with expert tips from engineers who got hired. Real Q&As, preparation strategies, and insider advice for all tech jobs in Australia.',
+             url: '/resources/interview-tips/tech-interviews/telstra-tech-interview'
+           },
+           {
+             id: '15',
+             title: 'EP7. Macquarie Group Tech Interview Questions & Tips',
+             thumbnail: 'https://images.unsplash.com/photo-1551434678-e076c223a692?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+             createdAt: '2025-10-25',
+             description: 'Master Macquarie Group tech interviews with expert tips from engineers who got hired. Real Q&As, preparation strategies, and insider advice for all tech jobs in Australia.',
+             url: '/resources/interview-tips/tech-interviews/macquarie-tech-interview'
+           },
+           {
+             id: '16',
+             title: 'EP8. Woolworths Group Tech Interview Questions & Tips',
+             thumbnail: 'https://images.unsplash.com/photo-1551434678-e076c223a692?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+             createdAt: '2025-10-25',
+             description: 'Master Woolworths Group tech interviews with expert tips from engineers who got hired. Real Q&As, preparation strategies, and insider advice for all tech jobs in Australia.',
+             url: '/resources/interview-tips/tech-interviews/woolworths-tech-interview'
+           },
+           {
+             id: '17',
+             title: 'EP9. BHP Group Tech Interview Questions & Tips',
+             thumbnail: 'https://images.unsplash.com/photo-1551434678-e076c223a692?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+             createdAt: '2025-10-25',
+             description: 'Master BHP Group tech interviews with expert tips from engineers who got hired. Real Q&As, preparation strategies, and insider advice for all tech jobs in Australia.',
+             url: '/resources/interview-tips/tech-interviews/bhp-tech-interview'
+           },
+           {
+             id: '18',
+             title: 'EP10. Rio Tinto Tech Interview Questions & Tips',
+             thumbnail: 'https://images.unsplash.com/photo-1551434678-e076c223a692?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+             createdAt: '2025-10-25',
+             description: 'Master Rio Tinto tech interviews with expert tips from engineers who got hired. Real Q&As, preparation strategies, and insider advice for all tech jobs in Australia.',
+             url: '/resources/interview-tips/tech-interviews/rio-tinto-tech-interview'
+           },
+           {
+             id: '19',
+             title: 'EP11. Coles Tech Interview Questions & Tips',
+             thumbnail: 'https://images.unsplash.com/photo-1551434678-e076c223a692?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+             createdAt: '2025-10-25',
+             description: 'Master Coles tech interviews with expert tips from engineers who got hired. Real Q&As, preparation strategies, and insider advice for all tech jobs in Australia.',
+             url: '/resources/interview-tips/tech-interviews/coles-tech-interview'
+           },
+           {
+             id: '20',
+             title: 'EP12. Atlassian Tech Interview Questions & Tips',
+             thumbnail: 'https://images.unsplash.com/photo-1551434678-e076c223a692?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+             createdAt: '2025-10-25',
+             description: 'Master Atlassian tech interviews with expert tips from engineers who got hired. Real Q&As, preparation strategies, and insider advice for all tech jobs in Australia.',
+             url: '/resources/interview-tips/tech-interviews/atlassian-tech-interview'
+           },
+           {
+             id: '21',
+             title: 'EP13. Canva Tech Interview Questions & Tips',
+             thumbnail: 'https://images.unsplash.com/photo-1551434678-e076c223a692?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+             createdAt: '2025-10-25',
+             description: 'Master Canva tech interviews with expert tips from engineers who got hired. Real Q&As, preparation strategies, and insider advice for all tech jobs in Australia.',
+             url: '/resources/interview-tips/tech-interviews/canva-tech-interview'
           },
           {
             id: '11',
@@ -381,10 +621,10 @@ export default function ResourcesPage() {
                         {/* 视频网格 */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                           {category.videos.map((video) => (
-                            <div
+                            <Link
                               key={video.id}
-                              className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
-                              onClick={() => window.open(video.url, '_blank')}
+                              href={video.url}
+                              className="block bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
                             >
                               {/* 视频缩略图 */}
                               <div className="aspect-video bg-gray-100 relative">
@@ -420,16 +660,24 @@ export default function ResourcesPage() {
                                   {video.description}
                                 </p>
                               </div>
-                            </div>
+                            </Link>
                           ))}
                         </div>
                         
                         {/* Show All 按钮 */}
                         {category.showAll && (
                           <div className="flex justify-end mt-0.5">
-                            <button className="text-sm text-gray-600 font-medium hover:underline">
+                            <Link 
+                              href={
+                                category.name === 'Christmas Casuals' ? '/resources/interview-tips/christmas-casuals' :
+                                category.name === 'Graduate & Interns' ? '/resources/interview-tips/graduate-interns' :
+                                category.name === 'Finance & Strategy' ? '/resources/interview-tips/finance-strategy' :
+                                '#'
+                              }
+                              className="text-sm text-gray-600 font-medium hover:underline"
+                            >
                               Show All ({category.totalCount})
-                            </button>
+                            </Link>
                           </div>
                         )}
                       </div>
